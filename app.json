@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "ProStory",
+    "slug": "prostory",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "icon": "./assets/images/icon.png",
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "backgroundColor": "#1E293B",
+      "resizeMode": "contain"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSCameraUsageDescription": "L'application a besoin de la caméra pour photographier vos réalisations.",
+        "NSPhotoLibraryUsageDescription": "L'application a besoin d'accéder à vos photos pour illustrer vos réalisations."
+      }
+    },
+    "android": {
+      "package": "com.prostory.mvp",
+      "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE"],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#1E293B"
+      }
+    },
+    "web": {
+      "favicon": "./assets/images/favicon.png"
+    }
+  }
+}

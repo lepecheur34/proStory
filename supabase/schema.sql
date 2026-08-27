@@ -1,0 +1,108 @@
+-- ============================================================
+-- Schéma ProStory — à coller dans Supabase > SQL Editor > Run
+-- ============================================================
+
+-- Table profil artisan : renseigné à l'inscription (métier + infos sur son
+-- activité). Sert à personnaliser le ton des contenus générés par l'IA.
+create table if not exists public.profiles (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  metier_id text not null,
+  nom_entreprise text,
+  ville text,
+  description text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+alter table public.profiles enable row level security;
+
+create policy "Chacun voit son propre profil"
+  on public.profiles for select
+  using (auth.uid() = user_id);
+
+create policy "Chacun crée son propre profil"
+  on public.profiles for insert
+  with check (auth.uid() = user_id);
+
+create policy "Chacun modifie son propre profil"
+  on public.profiles for update
+  using (auth.uid() = user_id);
+
+
+-- Table des réalisations (historique synchronisé, remplace/complète
+-- l'historique local qui existait avant l'espace client)
+create table if not exists public.realisations (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  metier_id text not null,
+  client_email text not null,
+  description text,
+  photo_urls text[] default '{}',
+  facebook text,
+  instagram text,
+  linkedin text,
+  email_objet text,
+  email_corps text,
+  sent_channels text[] default '{}',
+  created_at timestamptz default now()
+);
+
+alter table public.realisations enable row level security;
+
+create policy "Chacun voit uniquement ses propres réalisations"
+  on public.realisations for select
+  using (auth.uid() = user_id);
+
+create policy "Chacun crée ses propres réalisations"
+  on public.realisations for insert
+  with check (auth.uid() = user_id);
+
+create policy "Chacun modifie ses propres réalisations"
+  on public.realisations for update
+  using (auth.uid() = user_id);
+
+create policy "Chacun supprime ses propres réalisations"
+  on public.realisations for delete
+  using (auth.uid() = user_id);
+
+
+-- Table de suivi des connexions réseaux sociaux (statut affiché dans
+-- l'écran "Compte"). Le vrai flux OAuth de connexion crée/maj une ligne ici.
+create table if not exists public.social_connections (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users(id) on delete cascade not null,
+  provider text not null check (provider in ('google', 'facebook', 'linkedin')),
+  account_label text,
+  connected_at timestamptz default now(),
+  unique (user_id, provider)
+);
+
+alter table public.social_connections enable row level security;
+
+create policy "Chacun voit ses propres connexions"
+  on public.social_connections for select
+  using (auth.uid() = user_id);
+
+create policy "Chacun gère ses propres connexions"
+  on public.social_connections for all
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+
+-- Bucket de stockage pour les photos des réalisations.
+-- (À créer aussi depuis Storage > New bucket si l'insert ci-dessous
+-- ne suffit pas selon la version de Supabase)
+insert into storage.buckets (id, name, public)
+values ('realisations-photos', 'realisations-photos', true)
+on conflict (id) do nothing;
+
+create policy "Chacun uploade dans son propre dossier"
+  on storage.objects for insert
+  with check (
+    bucket_id = 'realisations-photos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy "Photos publiques en lecture"
+  on storage.objects for select
+  using (bucket_id = 'realisations-photos');
