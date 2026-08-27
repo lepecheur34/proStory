@@ -57,7 +57,6 @@ export async function connectProvider(providerKey) {
 }
 
 export async function disconnectProvider(providerKey, userId) {
-  const provider = SOCIAL_PROVIDERS[providerKey];
   const { error } = await supabase
     .from("social_connections")
     .delete()

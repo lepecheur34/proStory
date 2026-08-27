@@ -12,12 +12,11 @@ import {
   Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import * as MailComposer from "expo-mail-composer";
 import { getMetier } from "../data/metiers";
 import { useApp } from "../context/AppContext";
 import { useProfile } from "../context/ProfileContext";
 import { generateContent } from "../services/aiService";
-import { sendReviewEmailAutomatic } from "../services/emailService";
+import { sendReviewEmailWithFallback } from "../services/emailService";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const GOLD = "#B8935A";
@@ -69,36 +68,17 @@ export default function RealisationDetailScreen({ route }) {
     setSendingChannel(channelId);
     try {
       if (channelId === "emailAvis") {
-        try {
-          // Tentative d'envoi automatique via Brevo (fonction serveur).
-          await sendReviewEmailAutomatic({
-            to: realisation.client_email,
-            subject: realisation.email_objet,
-            body: realisation.email_corps,
-            senderName: profile?.nom_entreprise,
-          });
+        const result = await sendReviewEmailWithFallback({
+          to: realisation.client_email,
+          subject: realisation.email_objet,
+          body: realisation.email_corps,
+          senderName: profile?.nom_entreprise,
+        });
+        if (result.method === "automatic") {
           await markChannelSent(realisation.id, channelId);
           Alert.alert("Email envoyé ✅", `L'avis a été envoyé automatiquement à ${realisation.client_email}.`);
-          return;
-        } catch (autoError) {
-          // Pas configuré ou en échec -> on bascule sur l'appli mail du
-          // téléphone pour que l'envoi reste possible dans tous les cas.
-          const available = await MailComposer.isAvailableAsync();
-          if (!available) {
-            Alert.alert(
-              "Envoi impossible",
-              "L'envoi automatique n'est pas configuré (voir README) et aucune appli mail n'est disponible sur ce téléphone."
-            );
-            return;
-          }
-          const result = await MailComposer.composeAsync({
-            recipients: [realisation.client_email],
-            subject: realisation.email_objet,
-            body: realisation.email_corps,
-          });
-          if (result.status === "sent" || result.status === "saved") {
-            await markChannelSent(realisation.id, channelId);
-          }
+        } else if (result.method === "manual") {
+          await markChannelSent(realisation.id, channelId);
         }
       } else {
         const content = realisation[channelId];

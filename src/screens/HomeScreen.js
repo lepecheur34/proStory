@@ -125,4 +125,3 @@ const styles = StyleSheet.create({
   statValue: { fontSize: 22, fontWeight: "800", color: "#0F172A" },
   statLabel: { fontSize: 10.5, color: "#94A3B8", textAlign: "center", marginTop: 4, paddingHorizontal: 4 },
 });
-

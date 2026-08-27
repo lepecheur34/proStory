@@ -13,7 +13,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { getMetier } from "../data/metiers";
 import { useApp } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
+import { useProfile } from "../context/ProfileContext";
 import { fetchConnections } from "../services/socialAuthService";
+import { sendReviewEmailWithFallback } from "../services/emailService";
 
 function PlatformBlock({ icon, title, value, onChange }) {
   return (
@@ -33,8 +35,9 @@ const SOCIAL_BY_CHANNEL = { facebook: "facebook", instagram: "facebook", linkedi
 export default function ResultScreen({ route, navigation }) {
   const { metierId, email, content, channels = [], description } = route.params;
   const metier = getMetier(metierId);
-  const { addRealisation } = useApp();
+  const { addRealisation, markChannelSent } = useApp();
   const { user } = useAuth();
+  const { profile } = useProfile();
 
   const [facebook, setFacebook] = useState(content.facebook);
   const [instagram, setInstagram] = useState(content.instagram);
@@ -84,7 +87,7 @@ export default function ResultScreen({ route, navigation }) {
   const saveRealisation = async () => {
     setPublishing(true);
     try {
-      await addRealisation({
+      const savedRealisation = await addRealisation({
         metierId,
         email,
         description,
@@ -95,10 +98,34 @@ export default function ResultScreen({ route, navigation }) {
         emailObjet: showEmail ? emailObjet : null,
         emailCorps: showEmail ? emailCorps : null,
       });
+
+      let emailMessage = "";
+      if (showEmail && email) {
+        try {
+          const result = await sendReviewEmailWithFallback({
+            to: email,
+            subject: emailObjet,
+            body: emailCorps,
+            senderName: profile?.nom_entreprise,
+          });
+          if (result.method === "automatic") {
+            await markChannelSent(savedRealisation.id, "emailAvis");
+            emailMessage = ` L'email d'avis a été envoyé automatiquement à ${email}.`;
+          } else if (result.method === "manual") {
+            await markChannelSent(savedRealisation.id, "emailAvis");
+            emailMessage = " L'email d'avis a été envoyé.";
+          } else {
+            emailMessage = " L'envoi de l'email a été annulé, tu pourras le refaire depuis la fiche.";
+          }
+        } catch (emailError) {
+          emailMessage = ` (email non envoyé : ${emailError.message})`;
+        }
+      }
+
       setSaved(true);
       Alert.alert(
         "Enregistré ✅",
-        "Retrouve cette réalisation dans l'historique pour envoyer l'email et partager sur les réseaux.",
+        `Retrouve cette réalisation dans "Mes réalisations" pour partager sur les réseaux non connectés.${emailMessage}`,
         [{ text: "OK", onPress: () => navigation.popToTop() }]
       );
     } catch (e) {
@@ -131,6 +158,10 @@ export default function ResultScreen({ route, navigation }) {
             <TextInput style={styles.blockInputSmall} value={emailObjet} onChangeText={setEmailObjet} />
             <Text style={styles.emailLabel}>Corps</Text>
             <TextInput style={styles.blockInput} value={emailCorps} onChangeText={setEmailCorps} multiline />
+            <Text style={styles.emailNote}>
+              Cet email partira automatiquement à la validation si l'envoi automatique est configuré (voir
+              README), sinon ton appli mail s'ouvrira.
+            </Text>
           </View>
         )}
 
@@ -183,6 +214,7 @@ const styles = StyleSheet.create({
     paddingBottom: 6,
   },
   emailLabel: { fontSize: 12, fontWeight: "700", color: "#64748B", marginBottom: 4 },
+  emailNote: { fontSize: 11, color: "#94A3B8", marginTop: 10, fontStyle: "italic" },
   validateButton: {
     marginTop: 24,
     backgroundColor: "#16A34A",
