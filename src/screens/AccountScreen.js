@@ -14,15 +14,8 @@ import { useFocusEffect } from "@react-navigation/native";
 import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../context/ProfileContext";
 import { getMetier } from "../data/metiers";
-import {
-  SOCIAL_PROVIDERS,
-  connectProvider,
-  disconnectProvider,
-  saveConnection,
-  saveReviewLink,
-  fetchConnections,
-} from "../services/socialAuthService";
-import { fetchFacebookPages, saveFacebookPage, disconnectFacebookPage } from "../services/facebookService";
+import { SOCIAL_PROVIDERS, saveReviewLink, fetchConnections } from "../services/socialAuthService";
+import { saveWordPressConnection, disconnectWordPress, testWordPressConnection } from "../services/wordpressService";
 
 // Carte unique pour Google : contrairement à Facebook/LinkedIn, ce qui compte
 // ici n'est pas une identité OAuth mais le lien d'avis. L'état "connecté"
@@ -95,51 +88,73 @@ function GoogleReviewCard({ provider, connection, userId, onSaved }) {
   );
 }
 
-// Carte unique pour Facebook : ce qui compte n'est pas juste une identité
-// OAuth mais une Page précise (+ son compte Instagram lié le cas échéant),
-// avec son token de publication. L'état "connecté" reflète la présence
-// d'une Page enregistrée.
-function FacebookPageCard({ connection, userId, onSaved }) {
-  const [connecting, setConnecting] = useState(false);
-  const isConnected = Boolean(connection?.facebook_page_id);
+// Carte pour le site WordPress de l'artisan (plugin "ProStory Connector",
+// voir wordpress-plugin/) : URL du site + clé API généré par le plugin.
+// Quand connecté, chaque nouvelle réalisation est aussi publiée comme un
+// vrai article sur ce site, utilisé en priorité pour le partage.
+//
+// Le badge "Connecté" (vert) ne reflète pas juste la présence
+// d'identifiants enregistrés : il ne s'affiche qu'après un vrai test de
+// connexion réussi (création d'un article de test dans le Custom Post
+// Type "Réalisations" du plugin). Tant que ce n'est pas testé avec succès
+// dans cette session, le badge reste "Non vérifié".
+function WordPressCard({ connection, userId, onSaved }) {
+  const [siteUrl, setSiteUrl] = useState(connection?.wordpress_site_url || "");
+  const [apiKey, setApiKey] = useState(connection?.wordpress_api_key || "");
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [verified, setVerified] = useState(false);
 
-  const finalizePageChoice = async (page) => {
+  useEffect(() => {
+    setSiteUrl(connection?.wordpress_site_url || "");
+    setApiKey(connection?.wordpress_api_key || "");
+    setVerified(false);
+  }, [connection?.wordpress_site_url, connection?.wordpress_api_key]);
+
+  const isConfigured = Boolean(connection?.wordpress_site_url && connection?.wordpress_api_key);
+  const dirty =
+    siteUrl.trim() !== (connection?.wordpress_site_url || "") || apiKey.trim() !== (connection?.wordpress_api_key || "");
+
+  const runTest = async (siteUrlToTest, apiKeyToTest) => {
+    setTesting(true);
     try {
-      await saveFacebookPage(userId, page);
-      await onSaved();
+      const result = await testWordPressConnection({ siteUrl: siteUrlToTest, apiKey: apiKeyToTest });
+      setVerified(true);
+      Alert.alert("Connexion vérifiée ✅", `Un article de test a été créé sur ton site :\n${result.url}`);
     } catch (e) {
-      Alert.alert("Impossible d'enregistrer", e.message || "Réessaie plus tard.");
+      setVerified(false);
+      Alert.alert("Connexion impossible", e.message || "Vérifie l'URL du site et la clé API.");
+    } finally {
+      setTesting(false);
     }
   };
 
-  const handleConnect = async () => {
-    setConnecting(true);
+  const handleSave = async () => {
+    if (!siteUrl.trim() || !apiKey.trim()) {
+      Alert.alert("Champs manquants", "Renseigne l'URL du site et la clé API (visibles dans Réglages > ProStory sur ton site).");
+      return;
+    }
+    setSaving(true);
     try {
-      const pages = await fetchFacebookPages();
-      if (pages.length === 1) {
-        await finalizePageChoice(pages[0]);
-        return;
-      }
-      Alert.alert("Choisis ta Page", "Plusieurs Pages Facebook sont liées à ton compte.", [
-        ...pages.map((page) => ({ text: page.name, onPress: () => finalizePageChoice(page) })),
-        { text: "Annuler", style: "cancel" },
-      ]);
+      await saveWordPressConnection(userId, { siteUrl: siteUrl.trim(), apiKey: apiKey.trim() });
+      await onSaved();
+      await runTest(siteUrl.trim(), apiKey.trim());
     } catch (e) {
-      Alert.alert("Connexion impossible", e.message || "Réessaie plus tard.");
+      Alert.alert("Impossible d'enregistrer", e.message || "Réessaie plus tard.");
     } finally {
-      setConnecting(false);
+      setSaving(false);
     }
   };
 
   const handleDisconnect = () => {
-    Alert.alert("Déconnecter cette Page ?", "Tu pourras en reconnecter une (la même ou une autre) à tout moment.", [
+    Alert.alert("Déconnecter ce site ?", "", [
       { text: "Annuler", style: "cancel" },
       {
         text: "Déconnecter",
         style: "destructive",
         onPress: async () => {
           try {
-            await disconnectFacebookPage(userId);
+            await disconnectWordPress(userId);
             await onSaved();
           } catch (e) {
             Alert.alert("Impossible", e.message || "Réessaie plus tard.");
@@ -149,72 +164,85 @@ function FacebookPageCard({ connection, userId, onSaved }) {
     ]);
   };
 
+  const statusLabel = verified ? "✅ Connecté" : isConfigured ? "⚠️ Non vérifié" : "Non connecté";
+  const statusPillStyle = verified
+    ? styles.statusPillConnected
+    : isConfigured
+    ? styles.statusPillWarning
+    : styles.statusPillDefault;
+  const statusTextStyle = verified
+    ? styles.statusPillTextConnected
+    : isConfigured
+    ? styles.statusPillTextWarning
+    : styles.statusPillText;
+
   return (
     <View style={styles.googleCard}>
       <View style={styles.googleCardHeader}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.rowLabel}>Facebook (page pro)</Text>
+          <Text style={styles.rowLabel}>Site WordPress</Text>
           <Text style={styles.rowNote}>
-            {isConnected
-              ? `Page identifiée : "${connection.facebook_page_name}"${
-                  connection.instagram_username ? ` (+ Instagram @${connection.instagram_username})` : ""
-                }. La publication automatique n'est pas encore activée (Meta demande une validation
-              supplémentaire) — partage les posts toi-même depuis "Mes réalisations" en un tap.`
-              : "Identifie ta Page pro (préparation pour une future publication automatique). En attendant, partage les posts toi-même depuis \"Mes réalisations\"."}
+            Publie automatiquement chaque réalisation comme article sur ton site (nécessite le
+            plugin "ProStory Connector").
           </Text>
         </View>
-        <View style={[styles.statusPill, isConnected ? styles.statusPillConnected : styles.statusPillDefault]}>
-          <Text style={isConnected ? styles.statusPillTextConnected : styles.statusPillText}>
-            {isConnected ? "✅ Connecté" : "Non connecté"}
-          </Text>
+        <View style={[styles.statusPill, statusPillStyle]}>
+          <Text style={statusTextStyle}>{statusLabel}</Text>
         </View>
       </View>
 
       <View style={styles.googleCardDivider} />
 
+      <Text style={styles.reviewLinkLabel}>URL du site</Text>
+      <TextInput
+        style={styles.reviewLinkInput}
+        placeholder="https://monsite.fr"
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="url"
+        value={siteUrl}
+        onChangeText={setSiteUrl}
+      />
+      <Text style={styles.reviewLinkLabel}>Clé API</Text>
+      <Text style={styles.reviewLinkHint}>Les deux sont visibles dans Réglages → ProStory sur ton site.</Text>
+      <TextInput
+        style={styles.reviewLinkInput}
+        placeholder="Clé générée par le plugin"
+        autoCapitalize="none"
+        autoCorrect={false}
+        secureTextEntry
+        value={apiKey}
+        onChangeText={setApiKey}
+      />
       <TouchableOpacity
-        style={[styles.reviewLinkSaveButton, connecting && styles.disabled]}
-        onPress={isConnected ? handleDisconnect : handleConnect}
-        disabled={connecting}
+        style={[styles.reviewLinkSaveButton, (!dirty || saving) && styles.disabled]}
+        onPress={handleSave}
+        disabled={!dirty || saving}
       >
-        {connecting ? (
+        {saving ? (
           <ActivityIndicator color="white" size="small" />
         ) : (
-          <Text style={styles.reviewLinkSaveButtonText}>
-            {isConnected ? "Déconnecter / changer de page" : "Connecter ma page Facebook"}
-          </Text>
+          <Text style={styles.reviewLinkSaveButtonText}>{isConfigured ? "Mettre à jour" : "Connecter"}</Text>
         )}
       </TouchableOpacity>
-    </View>
-  );
-}
-
-function ProviderRow({ providerKey, provider, connection, onToggle, busy }) {
-  const isConnected = Boolean(connection);
-  return (
-    <View style={styles.row}>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.rowLabel}>{provider.label}</Text>
-        <Text style={styles.rowNote}>{provider.note}</Text>
-        {!provider.configured && (
-          <Text style={styles.rowConfigWarning}>
-            Non configuré côté appli ({provider.envKey} manquant dans .env)
-          </Text>
-        )}
-      </View>
-      <TouchableOpacity
-        style={[styles.rowButton, isConnected ? styles.rowButtonConnected : styles.rowButtonDefault]}
-        onPress={() => onToggle(providerKey)}
-        disabled={busy}
-      >
-        {busy ? (
-          <ActivityIndicator color={isConnected ? "#166534" : "white"} size="small" />
-        ) : (
-          <Text style={isConnected ? styles.rowButtonTextConnected : styles.rowButtonText}>
-            {isConnected ? "✅ Connecté" : "Connecter"}
-          </Text>
-        )}
-      </TouchableOpacity>
+      {isConfigured && !dirty && (
+        <TouchableOpacity
+          style={[styles.wpTestButton, testing && styles.disabled]}
+          onPress={() => runTest(connection.wordpress_site_url, connection.wordpress_api_key)}
+          disabled={testing}
+        >
+          {testing ? (
+            <ActivityIndicator color="#0F172A" size="small" />
+          ) : (
+            <Text style={styles.wpTestButtonText}>🔄 Tester la connexion</Text>
+          )}
+        </TouchableOpacity>
+      )}
+      {isConfigured && (
+        <TouchableOpacity style={styles.wpDisconnectButton} onPress={handleDisconnect}>
+          <Text style={styles.wpDisconnectButtonText}>Déconnecter ce site</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -225,7 +253,6 @@ export default function AccountScreen({ navigation }) {
   const metier = getMetier(profile?.metier_id);
   const [connections, setConnections] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
-  const [busyProvider, setBusyProvider] = useState(null);
 
   const loadConnections = useCallback(async () => {
     if (!user) return;
@@ -247,24 +274,6 @@ export default function AccountScreen({ navigation }) {
   );
 
   const getConnection = (providerKey) => connections.find((c) => c.provider === providerKey);
-
-  const handleToggle = async (providerKey) => {
-    const existing = getConnection(providerKey);
-    setBusyProvider(providerKey);
-    try {
-      if (existing) {
-        await disconnectProvider(providerKey, user.id);
-      } else {
-        await connectProvider(providerKey);
-        await saveConnection(providerKey, user.id, user.email);
-      }
-      await loadConnections();
-    } catch (e) {
-      Alert.alert("Impossible pour l'instant", e.message || "Réessaie plus tard.");
-    } finally {
-      setBusyProvider(null);
-    }
-  };
 
   const handleSignOut = () => {
     Alert.alert("Se déconnecter ?", "", [
@@ -293,11 +302,11 @@ export default function AccountScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.sectionTitle}>Connexions réseaux sociaux</Text>
+        <Text style={styles.sectionTitle}>Connexions</Text>
         <Text style={styles.sectionSubtitle}>
-          Connecter un compte l'identifie sur ton profil. La publication automatique de posts
-          demande en plus une validation de la plateforme (voir README) — tant que ce n'est pas
-          validé, tu continueras à publier toi-même les textes générés par l'IA.
+          Facebook/Instagram/LinkedIn se partagent directement via l'app du téléphone, pas besoin de
+          connexion ici. Seuls Google (lien d'avis) et ton site WordPress (publication d'articles) se
+          configurent.
         </Text>
 
         {loadingList ? (
@@ -310,19 +319,7 @@ export default function AccountScreen({ navigation }) {
               userId={user.id}
               onSaved={loadConnections}
             />
-            <FacebookPageCard connection={getConnection("facebook")} userId={user.id} onSaved={loadConnections} />
-            {Object.entries(SOCIAL_PROVIDERS)
-              .filter(([key]) => key !== "google" && key !== "facebook")
-              .map(([key, provider]) => (
-                <ProviderRow
-                  key={key}
-                  providerKey={key}
-                  provider={provider}
-                  connection={getConnection(key)}
-                  onToggle={handleToggle}
-                  busy={busyProvider === key}
-                />
-              ))}
+            <WordPressCard connection={getConnection("wordpress")} userId={user.id} onSaved={loadConnections} />
           </>
         )}
 
@@ -353,25 +350,8 @@ const styles = StyleSheet.create({
   editProfileButtonText: { color: "#2563EB", fontWeight: "700", fontSize: 13 },
   sectionTitle: { fontSize: 16, fontWeight: "700", color: "#1E293B", marginBottom: 6 },
   sectionSubtitle: { fontSize: 12.5, color: "#64748B", marginBottom: 16, lineHeight: 18 },
-  row: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "white",
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "#E2E8F0",
-    gap: 12,
-  },
   rowLabel: { fontWeight: "700", color: "#1E293B", fontSize: 14.5 },
   rowNote: { fontSize: 11.5, color: "#94A3B8", marginTop: 2 },
-  rowConfigWarning: { fontSize: 11, color: "#B45309", marginTop: 4 },
-  rowButton: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 8, minWidth: 96, alignItems: "center" },
-  rowButtonDefault: { backgroundColor: "#0F172A" },
-  rowButtonConnected: { backgroundColor: "#DCFCE7" },
-  rowButtonText: { color: "white", fontWeight: "700", fontSize: 12.5 },
-  rowButtonTextConnected: { color: "#166534", fontWeight: "700", fontSize: 12.5 },
   signOutButton: { marginTop: 28, alignItems: "center", paddingVertical: 12 },
   signOutText: { color: "#DC2626", fontWeight: "700", fontSize: 14 },
   googleCard: {
@@ -387,8 +367,10 @@ const styles = StyleSheet.create({
   statusPill: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, minWidth: 96, alignItems: "center" },
   statusPillDefault: { backgroundColor: "#F1F5F9" },
   statusPillConnected: { backgroundColor: "#DCFCE7" },
+  statusPillWarning: { backgroundColor: "#FEF3C7" },
   statusPillText: { color: "#64748B", fontWeight: "700", fontSize: 12.5 },
   statusPillTextConnected: { color: "#166534", fontWeight: "700", fontSize: 12.5 },
+  statusPillTextWarning: { color: "#92400E", fontWeight: "700", fontSize: 12.5 },
   reviewLinkLabel: { fontWeight: "700", color: "#1E293B", fontSize: 13.5 },
   reviewLinkHint: { fontSize: 11.5, color: "#94A3B8", marginTop: 4, marginBottom: 10, lineHeight: 16 },
   reviewLinkInput: {
@@ -409,4 +391,15 @@ const styles = StyleSheet.create({
   },
   reviewLinkSaveButtonText: { color: "white", fontWeight: "700", fontSize: 12.5 },
   disabled: { opacity: 0.4 },
+  wpTestButton: {
+    alignItems: "center",
+    paddingVertical: 10,
+    marginTop: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  wpTestButtonText: { color: "#0F172A", fontWeight: "700", fontSize: 12.5 },
+  wpDisconnectButton: { alignItems: "center", paddingVertical: 10, marginTop: 4 },
+  wpDisconnectButtonText: { color: "#DC2626", fontWeight: "700", fontSize: 12.5 },
 });

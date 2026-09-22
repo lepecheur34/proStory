@@ -4,8 +4,7 @@ MVP mobile pour artisans : photos + description d'une réalisation → générat
 posts (Facebook / Instagram / LinkedIn) + email de demande d'avis Google, éditables
 avant envoi. Métiers paramétrables (garagiste, plombier, paysagiste, rénovation,
 électricien — voir `src/data/metiers.js`). Espace client avec connexion,
-inscription, historique synchronisé dans le cloud, et paramétrage des
-connexions réseaux sociaux.
+inscription, historique synchronisé dans le cloud.
 
 ## Ce qui fonctionne dans ce MVP
 
@@ -21,56 +20,38 @@ connexions réseaux sociaux.
 - Édition du texte généré avant validation
 - **Envoi automatique de l'email d'avis dès la validation** de la
   réalisation (si Brevo est configuré, sinon ouverture de l'appli mail du
-  téléphone en repli)
+  téléphone en repli), avec le lien d'avis Google de l'artisan inséré
+  automatiquement (configuré dans Compte)
+- **Publication automatique en article WordPress** si l'artisan a connecté
+  son site (plugin `wordpress-plugin/`, configuré dans Compte) — image à la
+  une, contenu, méta-description SEO
+- **Partage Facebook / Instagram / LinkedIn** : chaque réalisation a une page
+  publique (photo + texte, balises Open Graph — ou l'article WordPress si
+  connecté) partagée via le menu natif du téléphone. Facebook/LinkedIn
+  affichent un aperçu riche automatiquement ; pour Instagram (qui ne
+  supporte aucun lien-aperçu vers le fil), le texte est copié et l'app
+  s'ouvre directement
 - Historique synchronisé dans le cloud, avec **page détail par réalisation** :
   photos en galerie, date, note de l'artisan, canaux existants avec statut
   d'envoi, **ajout d'un canal a posteriori** (ex : générer aussi un post
-  LinkedIn après coup), et bouton d'envoi/partage pour les canaux pas encore
+  LinkedIn après coup), et bouton de partage pour les canaux pas encore
   envoyés
 - Accueil avec statistiques d'activité (réalisations totales, ce mois-ci,
   taux de canaux envoyés)
-- Écran "Compte" listant les connexions Facebook / LinkedIn / Google, avec
-  statut connecté / non connecté
+- Écran "Compte" : lien d'avis Google + connexion du site WordPress
 
-## Ce qui est simulé ou nécessite une étape manuelle de ta part
+## Publication automatique directe sur Facebook/Instagram (API Graph) : abandonnée
 
-- **Publication automatique sur Facebook / Instagram / LinkedIn** : pas
-  encore active. Le texte généré par l'IA reste éditable et se partage via
-  le bouton natif du téléphone (coller en un tap depuis "Mes
-  réalisations"). L'écran Compte permet quand même de **connecter/identifier**
-  ta Page Facebook (choix parmi les Pages gérées par l'artisan, via l'API
-  Graph) — cette partie fonctionne, mais elle ne sert pour l'instant qu'à
-  savoir quelle Page est associée à l'artisan, pas à publier automatiquement.
-
-  **Pourquoi ce n'est pas branché** (pour reprendre plus tard sans tout
-  redécouvrir) : Meta a strictement besoin d'un **token d'accès utilisateur
-  système** (obtenu via un portefeuille business) pour autoriser
-  `pages_manage_posts`/`pages_read_engagement` — un token d'accès utilisateur
-  "personnel" (ce qu'on a mis en place) ne peut techniquement pas obtenir ces
-  permissions, quel que soit le chemin emprunté (testé à la fois via
-  Facebook Login classique et via une config "Facebook Login for Business").
-  C'est la même contrainte que subissent des outils comme Buffer/Hootsuite,
-  qui demandent eux aussi à l'utilisateur de passer par un portefeuille
-  business.
-
-  Ce qui est déjà en place et réutilisable si tu veux reprendre ce chantier :
-  - Une app Meta dédiée (`4162843980518238`) avec les cas d'utilisation
-    "Tout gérer sur votre Page" + "Gérer les messages et les contenus sur
-    Instagram", liée à un portefeuille business ("FDPL Group")
-  - Une configuration Facebook Login for Business (`config_id`) — à
-    **recréer en choisissant "Token d'accès utilisateur système"** au lieu
-    de "Token d'accès utilisateur" (ce choix ne peut pas être changé sur une
-    config existante), ce qui débloquera la sélection des Pages/tâches
-    directement dans la config
-  - Le flux OAuth maison (bypass de `supabase.auth.linkIdentity`, qui force
-    un scope `email` incompatible avec Facebook Login for Business) dans
-    `src/services/facebookService.js`, avec son relais de redirection
-    (`supabase/functions/facebook-oauth-relay`) et l'échange de code côté
-    serveur (`supabase/functions/facebook-connect`)
-  - Les fonctions `publishToFacebookPage()` / `publishToInstagram()` dans
-    `facebookService.js` : déjà écrites et prêtes à être rebranchées dans
-    `ResultScreen.js` / `RealisationDetailScreen.js` une fois qu'un token
-    avec les bonnes permissions sera obtenu
+Une version précédente tentait de publier directement sur la Page Facebook de
+l'artisan via l'API Graph (OAuth complet, sélection de Page). Abandonné :
+Meta exige un **token d'accès utilisateur système** (obtenu via un
+portefeuille business) pour `pages_manage_posts`/`pages_read_engagement` — un
+token utilisateur "personnel" ne peut pas obtenir ces permissions, quel que
+soit le chemin emprunté. C'est la même contrainte que subissent des outils
+comme Buffer/Hootsuite. Le partage via le menu natif du téléphone (voir
+ci-dessus) offre un résultat similaire (aperçu riche automatique) sans cette
+complexité. Le détail de cette exploration reste consultable dans l'historique
+git si besoin d'y revenir un jour.
 
 ---
 
@@ -150,89 +131,20 @@ généré instantanément).
 l'appli mobile — utilise un backend relais. Ce mode direct sert à tester le
 MVP rapidement.
 
-### 6. (Optionnel) Configurer les connexions réseaux sociaux
+### 6. (Optionnel) Connecter un site WordPress (publication automatique d'articles)
 
-Tant que cette étape n'est pas faite, les boutons "Connecter" de l'écran
-Compte affichent "non configuré" — l'appli ne plante pas.
+Sans cette étape, les réalisations restent partageables normalement (menu
+natif du téléphone vers une page publique générée par Supabase) — c'est
+juste que rien n'est publié sur un site en plus.
 
-**Google** :
-1. [console.cloud.google.com](https://console.cloud.google.com) > créer un
-   projet > **APIs & Services > Credentials > Create OAuth client ID**
-2. Dans Supabase : **Authentication > Providers > Google**, colle Client
-   ID/Secret
-3. `.env` : `EXPO_PUBLIC_GOOGLE_CLIENT_ID=...`
-
-**Facebook (connexion de la Page + publication directe des posts)** :
-
-Contrairement à Google/LinkedIn (identification seulement), Facebook va ici
-jusqu'à la **vraie publication de posts** sur la Page (et sur Instagram si un
-compte Instagram Business y est lié). Ça demande un peu plus de configuration
-Meta.
-
-1. Sur [developers.facebook.com](https://developers.facebook.com/apps) crée
-   une appli de type **Entreprise (Business)**.
-2. Sur l'écran **"Ajouter des cas d'utilisation"** : cherche/prends le cas
-   d'utilisation **"Connexion Facebook"** (ou **"Facebook Login for
-   Business"** s'il apparaît — plus adapté ici puisqu'on veut accéder aux
-   Pages de l'artisan, pas juste identifier une personne). Les cartes
-   "Gestion du contenu" / "Publicités et monétisation" ne sont **pas** ce
-   qu'il te faut ici : elles servent à publier des pubs/insights, pas à
-   activer l'API Pages pour un login utilisateur. Si tu ne trouves pas
-   "Connexion Facebook" dans les catégories affichées, utilise la barre de
-   recherche en haut de cet écran — elle liste tous les cas d'utilisation
-   disponibles.
-3. Une fois le produit **Facebook Login** ajouté : va dans
-   **Facebook Login > Paramètres**, et ajoute dans **"URI de redirection
-   OAuth valides"** :
-   ```
-   https://<ton-projet>.supabase.co/auth/v1/callback
-   ```
-   (`<ton-projet>` = la référence de ton projet Supabase, visible dans
-   l'URL du dashboard ou dans **Project Settings > General**). Active aussi
-   **"Connexion OAuth côté client"** (Client OAuth Login) et
-   **"Connexion OAuth web"** (Web OAuth Login).
-4. Récupère l'**App ID** et l'**App Secret** : **Paramètres de l'application
-   > Général**.
-5. Dans Supabase : **Authentication > Providers > Facebook**, colle App
-   ID/Secret, active le provider.
-6. `.env` : `EXPO_PUBLIC_FACEBOOK_APP_ID=...` (l'App Secret, lui, ne va
-   jamais dans `.env` — voir étape 8).
-7. **Pendant que Meta n'a pas validé l'appli (App Review)**, seuls les
-   comptes ajoutés comme administrateur/développeur/testeur peuvent utiliser
-   la connexion Page. Ajoute-toi (et tes artisans pilotes) : **Rôles de
-   l'application > Ajouter des personnes**.
-8. Déploie la fonction serveur qui échange le token contre un accès longue
-   durée et récupère les Pages (l'App Secret ne doit **jamais** être dans
-   l'appli mobile — si la CLI Supabase n'est pas encore installée/liée à ton
-   projet, fais d'abord les étapes 4 et 5 de la section 7 ci-dessous) :
-   ```bash
-   supabase functions deploy facebook-connect
-   supabase secrets set FACEBOOK_APP_ID=ton-app-id FACEBOOK_APP_SECRET=ton-app-secret
-   ```
-9. Recolle le bloc `social_connections` de `supabase/schema.sql` dans
-   **SQL Editor** côté Supabase (ajoute les colonnes `facebook_page_id`,
-   `facebook_page_name`, `facebook_page_access_token`,
-   `instagram_business_id`, `instagram_username` si elles n'existent pas
-   encore).
-10. Pour que ça marche pour **n'importe quel artisan** (pas juste tes
-    comptes testeurs) : soumets l'appli à l'**App Review** de Meta en
-    demandant les permissions `pages_show_list`, `pages_read_engagement`,
-    `pages_manage_posts`, `business_management`, et si tu veux Instagram
-    `instagram_basic` + `instagram_content_publish`. Ça demande une
-    vérification d'entreprise et une démo vidéo du flux — compte plusieurs
-    jours, parfois plus.
-
-Concrètement : une fois les étapes 1 à 9 faites, **tu peux déjà tester toi-même**
-(en tant qu'admin/testeur de l'appli Meta) la connexion de Page et la
-publication réelle. Seule l'étape 10 est nécessaire pour ouvrir ça à tous tes
-utilisateurs.
-
-**LinkedIn** :
-1. [linkedin.com/developers](https://www.linkedin.com/developers/apps) > créer une appli
-2. Supabase : **Authentication > Providers > LinkedIn (OIDC)**
-3. `.env` : `EXPO_PUBLIC_LINKEDIN_CLIENT_ID=...`
-4. Pour publier automatiquement plus tard : demander le produit "Share on
-   LinkedIn".
+1. Installe le plugin dans `wordpress-plugin/prostory-connector/` sur le
+   site WordPress de l'artisan (voir `wordpress-plugin/README.md` pour le
+   détail : compresser en zip, **Extensions > Ajouter > Téléverser**, puis
+   **Activer**)
+2. Sur le site : **Réglages > ProStory** affiche l'URL du site et une clé
+   API générées automatiquement
+3. Dans l'appli, écran **Compte > Site WordPress** : colle ces deux
+   informations
 
 ### 7. (Optionnel) Envoi automatique d'email via Brevo
 
@@ -289,11 +201,13 @@ npx expo start --tunnel
 ```
 prostory/
 ├── App.js
+├── wordpress-plugin/
+│   └── prostory-connector/         # Plugin WP : publie les réalisations en articles
 ├── supabase/
 │   ├── schema.sql                  # À exécuter dans Supabase SQL Editor
 │   └── functions/
 │       ├── send-review-email/      # Edge Function : envoi email via Brevo
-│       └── facebook-connect/       # Edge Function : échange token + liste des Pages Facebook
+│       └── realisation-page/       # Edge Function : page publique (Open Graph) par réalisation
 ├── src/
 │   ├── screens/
 │   │   ├── LoginScreen.js
@@ -302,18 +216,19 @@ prostory/
 │   │   ├── ProfileFormScreen.js     # Onboarding + édition du profil
 │   │   ├── HomeScreen.js            # Accueil (métier issu du profil) + stats
 │   │   ├── CaptureScreen.js         # Photos + description + canaux
-│   │   ├── ResultScreen.js          # Résultat IA éditable + envoi auto
+│   │   ├── ResultScreen.js          # Résultat IA éditable + partage direct après enregistrement
 │   │   ├── HistoryScreen.js         # Liste des réalisations
 │   │   ├── RealisationDetailScreen.js  # Fiche complète par réalisation
-│   │   └── AccountScreen.js         # Profil + connexions réseaux sociaux
+│   │   └── AccountScreen.js         # Profil + lien d'avis Google + site WordPress
 │   ├── navigation/
 │   │   └── AppNavigator.js          # Auth → Onboarding (si besoin) → Onglets
 │   ├── services/
 │   │   ├── aiService.js             # Appel à l'API Anthropic (ou mode démo)
 │   │   ├── emailService.js          # Envoi Brevo + repli appli mail
 │   │   ├── supabaseClient.js
-│   │   ├── socialAuthService.js     # OAuth générique (Google/LinkedIn) + lien d'avis Google
-│   │   └── facebookService.js       # Connexion Page Facebook + publication Facebook/Instagram
+│   │   ├── socialAuthService.js     # Lien d'avis Google
+│   │   ├── wordpressService.js      # Connexion + publication d'articles WordPress
+│   │   └── shareService.js          # Partage natif Facebook/Instagram/LinkedIn
 │   ├── context/
 │   │   ├── AuthContext.js
 │   │   ├── ProfileContext.js
@@ -339,7 +254,8 @@ Ouvre `src/data/metiers.js` et ajoute un objet dans le tableau `METIERS` :
 ## Prochaines étapes suggérées
 
 1. Tester avec de vrais artisans pour valider le parcours et le prix
-2. Lancer les démarches de validation Meta/LinkedIn si tu veux automatiser
-   complètement la publication sur les réseaux
-3. Ajouter le paiement (abonnement)
-4. Préparer un vrai build installable (TestFlight / Play Store) via `eas build`
+2. Ajouter le paiement (abonnement)
+3. Préparer un vrai build installable (TestFlight / Play Store) via `eas build`
+   — c'est aussi ce qui permettrait, plus tard, de détecter quelles apps sont
+   réellement installées sur le téléphone pour n'afficher que les boutons de
+   partage pertinents (impossible dans Expo Go)

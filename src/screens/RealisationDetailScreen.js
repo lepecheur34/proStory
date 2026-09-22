@@ -43,14 +43,15 @@ function formatDate(iso) {
   return `${date} à ${time}`;
 }
 
-export default function RealisationDetailScreen({ route }) {
+export default function RealisationDetailScreen({ route, navigation }) {
   const { realisationId } = route.params;
-  const { realisations, markChannelSent, addChannelToRealisation } = useApp();
+  const { realisations, markChannelSent, addChannelToRealisation, deleteRealisation } = useApp();
   const { user } = useAuth();
   const { profile } = useProfile();
   const realisation = realisations.find((r) => r.id === realisationId);
   const [sendingChannel, setSendingChannel] = useState(null);
   const [addingChannel, setAddingChannel] = useState(null);
+  const [deleting, setDeleting] = useState(false);
 
   if (!realisation) {
     return (
@@ -95,6 +96,7 @@ export default function RealisationDetailScreen({ route }) {
         realisationId: realisation.id,
         channel: channelId,
         content: realisation[channelId],
+        pageUrl: realisation.wordpress_url || null,
       });
       if (shared) {
         await markChannelSent(realisation.id, channelId);
@@ -131,6 +133,30 @@ export default function RealisationDetailScreen({ route }) {
     } finally {
       setAddingChannel(null);
     }
+  };
+
+  const handleDelete = () => {
+    Alert.alert(
+      "Supprimer cette réalisation ?",
+      "Cette action est définitive. L'article déjà publié sur ton site WordPress (le cas échéant) ne sera pas supprimé, seulement retiré de ProStory.",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Supprimer",
+          style: "destructive",
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await deleteRealisation(realisation.id);
+              navigation.goBack();
+            } catch (e) {
+              Alert.alert("Erreur", e.message || "Impossible de supprimer pour l'instant.");
+              setDeleting(false);
+            }
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -244,6 +270,14 @@ export default function RealisationDetailScreen({ route }) {
             </View>
           </>
         )}
+
+        <TouchableOpacity style={styles.deleteButton} onPress={handleDelete} disabled={deleting}>
+          {deleting ? (
+            <ActivityIndicator color="#DC2626" size="small" />
+          ) : (
+            <Text style={styles.deleteButtonText}>🗑️ Supprimer cette réalisation</Text>
+          )}
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -342,4 +376,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   addChipText: { fontSize: 12.5, fontWeight: "700", color: "#334155" },
+  deleteButton: { alignItems: "center", paddingVertical: 16, marginTop: 24, marginHorizontal: 20 },
+  deleteButtonText: { color: "#DC2626", fontWeight: "700", fontSize: 13.5 },
 });

@@ -172,9 +172,32 @@ export function AppProvider({ children }) {
     return next.find((r) => r.id === realisationId);
   };
 
+  // Supprime définitivement une réalisation (protégé par RLS : chacun ne
+  // peut supprimer que les siennes). Ne supprime que l'entrée côté
+  // ProStory — pas l'article WordPress déjà publié le cas échéant, à gérer
+  // depuis le site si besoin.
+  const deleteRealisation = async (realisationId) => {
+    if (isSupabaseConfigured && user) {
+      const { error } = await supabase.from("realisations").delete().eq("id", realisationId);
+      if (error) throw error;
+    }
+
+    const next = realisations.filter((r) => r.id !== realisationId);
+    setRealisations(next);
+    saveToCache(next);
+  };
+
   return (
     <AppContext.Provider
-      value={{ realisations, addRealisation, markChannelSent, addChannelToRealisation, loaded, refresh }}
+      value={{
+        realisations,
+        addRealisation,
+        markChannelSent,
+        addChannelToRealisation,
+        deleteRealisation,
+        loaded,
+        refresh,
+      }}
     >
       {children}
     </AppContext.Provider>

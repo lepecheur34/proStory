@@ -13,8 +13,13 @@ export function getPublicPageUrl(realisationId, channel) {
 // elle-même, exactement comme pour un article de presse partagé depuis un
 // navigateur. Retourne true si l'artisan a effectivement partagé (pas
 // annulé).
-export async function shareRealisation({ realisationId, channel, content }) {
-  const pageUrl = getPublicPageUrl(realisationId, channel);
-  const result = await Share.share({ message: `${content}\n\n${pageUrl}`, url: pageUrl });
+//
+// Si l'artisan a connecté un site WordPress, ses réalisations y sont aussi
+// publiées comme de vrais articles (voir wordpressService.js) : on passe
+// alors explicitement cette URL en `pageUrl` pour l'utiliser à la place de
+// la page technique générée par Supabase.
+export async function shareRealisation({ realisationId, channel, content, pageUrl }) {
+  const url = pageUrl || getPublicPageUrl(realisationId, channel);
+  const result = await Share.share({ message: `${content}\n\n${url}`, url });
   return result.action === Share.sharedAction;
 }

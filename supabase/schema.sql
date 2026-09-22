@@ -44,8 +44,11 @@ create table if not exists public.realisations (
   email_objet text,
   email_corps text,
   sent_channels text[] default '{}',
+  wordpress_url text,
   created_at timestamptz default now()
 );
+
+alter table public.realisations add column if not exists wordpress_url text;
 
 alter table public.realisations enable row level security;
 
@@ -71,7 +74,7 @@ create policy "Chacun supprime ses propres réalisations"
 create table if not exists public.social_connections (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete cascade not null,
-  provider text not null check (provider in ('google', 'facebook', 'linkedin')),
+  provider text not null check (provider in ('google', 'facebook', 'linkedin', 'wordpress')),
   account_label text,
   review_link text,
   facebook_page_id text,
@@ -79,6 +82,8 @@ create table if not exists public.social_connections (
   facebook_page_access_token text,
   instagram_business_id text,
   instagram_username text,
+  wordpress_site_url text,
+  wordpress_api_key text,
   connected_at timestamptz default now(),
   unique (user_id, provider)
 );
@@ -91,6 +96,15 @@ alter table public.social_connections add column if not exists facebook_page_nam
 alter table public.social_connections add column if not exists facebook_page_access_token text;
 alter table public.social_connections add column if not exists instagram_business_id text;
 alter table public.social_connections add column if not exists instagram_username text;
+alter table public.social_connections add column if not exists wordpress_site_url text;
+alter table public.social_connections add column if not exists wordpress_api_key text;
+
+-- Si la table existait déjà avec l'ancienne contrainte (sans "wordpress"),
+-- on la remplace. Sans effet si la contrainte porte déjà le bon nom/contenu.
+alter table public.social_connections drop constraint if exists social_connections_provider_check;
+alter table public.social_connections
+  add constraint social_connections_provider_check
+  check (provider in ('google', 'facebook', 'linkedin', 'wordpress'));
 
 alter table public.social_connections enable row level security;
 

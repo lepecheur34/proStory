@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: ProStory Connector
- * Description: Reçoit les réalisations créées depuis l'appli mobile ProStory et les publie automatiquement en articles WordPress (avec image à la une et méta-description SEO).
- * Version: 1.0.0
+ * Description: Reçoit les réalisations créées depuis l'appli mobile ProStory et les publie automatiquement dans un type de contenu dédié "Réalisations" (image à la une et méta-description SEO).
+ * Version: 1.1.0
  * Author: ProStory
  * Text Domain: prostory-connector
  */
@@ -12,16 +12,56 @@ if (!defined('ABSPATH')) {
 }
 
 define('PROSTORY_OPTION_API_KEY', 'prostory_api_key');
+define('PROSTORY_POST_TYPE', 'prostory_realisation');
 
 // ============================================================
-// Activation : génère une clé API à l'installation si absente.
+// Custom Post Type "Réalisation" : les réalisations envoyées par l'appli
+// ProStory sont publiées ici plutôt que dans les articles classiques du
+// site, pour rester bien séparées du reste du contenu.
+// ============================================================
+function prostory_register_post_type() {
+    register_post_type(PROSTORY_POST_TYPE, array(
+        'label' => 'Réalisations',
+        'labels' => array(
+            'name' => 'Réalisations',
+            'singular_name' => 'Réalisation',
+            'add_new_item' => 'Ajouter une réalisation',
+            'edit_item' => 'Modifier la réalisation',
+            'all_items' => 'Toutes les réalisations',
+            'view_item' => 'Voir la réalisation',
+            'search_items' => 'Rechercher une réalisation',
+            'not_found' => 'Aucune réalisation trouvée',
+        ),
+        'public' => true,
+        'has_archive' => true,
+        'show_in_menu' => true,
+        'show_in_rest' => true,
+        'menu_icon' => 'dashicons-hammer',
+        'supports' => array('title', 'editor', 'thumbnail', 'excerpt'),
+        'taxonomies' => array('category'),
+        'rewrite' => array('slug' => 'realisations'),
+    ));
+}
+add_action('init', 'prostory_register_post_type');
+
+// ============================================================
+// Activation : génère une clé API à l'installation si absente, et force
+// la mise à jour des permaliens pour que le nouveau type de contenu
+// devienne accessible immédiatement.
 // ============================================================
 function prostory_activate() {
     if (!get_option(PROSTORY_OPTION_API_KEY)) {
         update_option(PROSTORY_OPTION_API_KEY, wp_generate_password(32, false));
     }
+    prostory_register_post_type();
+    flush_rewrite_rules();
 }
 register_activation_hook(__FILE__, 'prostory_activate');
+
+function prostory_deactivate() {
+    flush_rewrite_rules();
+}
+register_deactivation_hook(__FILE__, 'prostory_deactivate');
 
 // ============================================================
 // Page de réglages (Réglages > ProStory) : affiche l'URL du site
@@ -53,8 +93,10 @@ function prostory_render_settings_page() {
     ?>
     <div class="wrap">
         <h1>ProStory Connector</h1>
-        <p>Renseigne ces deux informations dans l'appli ProStory (Compte &gt; Site web) pour publier automatiquement
-            tes réalisations en articles sur ce site.</p>
+        <p>Renseigne ces deux informations dans l'appli ProStory (Compte &gt; Site WordPress) pour publier
+            automatiquement tes réalisations sur ce site, dans le type de contenu dédié
+            <a href="<?php echo esc_url(admin_url('edit.php?post_type=' . PROSTORY_POST_TYPE)); ?>">Réalisations</a>
+            (menu de gauche).</p>
         <table class="form-table">
             <tr>
                 <th scope="row">URL du site</th>
@@ -121,7 +163,7 @@ function prostory_create_realisation(WP_REST_Request $request) {
         'post_title' => $title,
         'post_content' => $content,
         'post_status' => 'publish',
-        'post_type' => 'post',
+        'post_type' => PROSTORY_POST_TYPE,
         'post_category' => prostory_get_or_create_category($metier),
     ), true);
 
