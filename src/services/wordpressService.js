@@ -47,7 +47,7 @@ export async function testWordPressConnection({ siteUrl, apiKey }) {
 
 // Publie une réalisation comme article sur le site WordPress connecté.
 // Retourne { id, url } (l'URL du nouvel article) fournis par le plugin.
-export async function createWordPressArticle({ siteUrl, apiKey, title, content, metaDescription, imageUrl, metier }) {
+export async function createWordPressArticle({ siteUrl, apiKey, title, content, metaDescription, imageUrl }) {
   const response = await fetch(`${siteUrl}/wp-json/prostory/v1/realisations`, {
     method: "POST",
     headers: {
@@ -59,7 +59,6 @@ export async function createWordPressArticle({ siteUrl, apiKey, title, content, 
       content,
       meta_description: metaDescription,
       image_url: imageUrl || undefined,
-      metier,
     }),
   });
   const data = await response.json();

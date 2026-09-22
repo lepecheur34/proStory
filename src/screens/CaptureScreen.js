@@ -18,28 +18,24 @@ import * as ImagePicker from "expo-image-picker";
 import { getMetier } from "../data/metiers";
 import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../context/ProfileContext";
-import { generateContent } from "../services/aiService";
-import { fetchReviewLink, withReviewLink } from "../services/socialAuthService";
+import { useApp } from "../context/AppContext";
+import { generateGenericContent } from "../services/aiService";
+import { fetchConnections, fetchReviewLink, withReviewLink } from "../services/socialAuthService";
+import { createWordPressArticle } from "../services/wordpressService";
+import { sendReviewEmailWithFallback } from "../services/emailService";
 
 const MAX_PHOTOS = 3;
-
-const CHANNELS = [
-  { id: "emailAvis", label: "✉️ Email avis Google", social: false },
-  { id: "facebook", label: "📘 Facebook", social: true },
-  { id: "instagram", label: "📸 Instagram", social: true },
-  { id: "linkedin", label: "💼 LinkedIn", social: true },
-];
 
 export default function CaptureScreen({ route, navigation }) {
   const { metierId } = route.params;
   const metier = getMetier(metierId);
   const { user } = useAuth();
   const { profile } = useProfile();
+  const { addRealisation, markChannelSent, addChannelToRealisation } = useApp();
 
   const [photos, setPhotos] = useState([null, null, null]);
   const [description, setDescription] = useState("");
   const [email, setEmail] = useState("");
-  const [channels, setChannels] = useState(CHANNELS.map((c) => c.id));
   const [loading, setLoading] = useState(false);
 
   const photoCount = photos.filter(Boolean).length;
@@ -119,35 +115,81 @@ export default function CaptureScreen({ route, navigation }) {
     }
   };
 
-  const toggleChannel = (id) => {
-    setChannels((prev) => (prev.includes(id) ? prev.filter((c) => c !== id) : [...prev, id]));
-  };
-
   const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-  const needsEmail = channels.length > 0; // toujours utile pour identifier le client
-  const canSubmit = channels.length > 0 && (!needsEmail || isValidEmail) && !loading;
+  const canSubmit = (!email.trim() || isValidEmail) && !loading;
 
   const handleSubmit = async () => {
     setLoading(true);
     try {
       const usedPhotos = photos.filter(Boolean);
-      const content = await generateContent({ photos: usedPhotos, metierId, profile, description });
+      const trimmedEmail = email.trim();
+      // Contenu générique, instantané, sans IA pour l'instant (viendra
+      // plus tard) — sert à l'email d'avis tout de suite, et à l'article
+      // WordPress. Les posts Facebook/Instagram/LinkedIn, eux, ne sont
+      // générés qu'au moment où l'artisan choisit de les partager, depuis
+      // la fiche réalisation.
+      const generic = generateGenericContent({ metierId, description });
 
-      if (channels.includes("emailAvis") && user) {
-        const reviewLink = await fetchReviewLink(user.id).catch(() => null);
-        content.emailAvis = withReviewLink(content.emailAvis, reviewLink);
+      const savedRealisation = await addRealisation({
+        metierId,
+        email: trimmedEmail || null,
+        description,
+        photos: usedPhotos,
+        facebook: null,
+        instagram: null,
+        linkedin: null,
+        emailObjet: trimmedEmail ? generic.emailAvis.objet : null,
+        emailCorps: trimmedEmail ? generic.emailAvis.corps : null,
+      });
+
+      // Email d'avis Google automatique, si un email a été renseigné.
+      if (trimmedEmail && user) {
+        try {
+          const reviewLink = await fetchReviewLink(user.id).catch(() => null);
+          const emailAvis = withReviewLink(generic.emailAvis, reviewLink);
+          const result = await sendReviewEmailWithFallback({
+            to: trimmedEmail,
+            subject: emailAvis.objet,
+            body: emailAvis.corps,
+            senderName: profile?.nom_entreprise,
+          });
+          if (result.method !== "manual-cancelled") {
+            await markChannelSent(savedRealisation.id, "emailAvis");
+          }
+        } catch (e) {
+          // Silencieux : l'artisan pourra renvoyer l'email depuis la fiche.
+        }
       }
 
-      navigation.navigate("Result", {
-        metierId,
-        email: email.trim(),
-        photos: usedPhotos,
-        description,
-        content,
-        channels,
-      });
+      // Publication automatique sur le site WordPress connecté, s'il y en
+      // a un (texte générique pour l'instant, l'IA arrivera plus tard).
+      if (user) {
+        try {
+          const connections = await fetchConnections(user.id);
+          const wpConnection = connections.find(
+            (c) => c.provider === "wordpress" && c.wordpress_site_url && c.wordpress_api_key
+          );
+          if (wpConnection) {
+            const wpResult = await createWordPressArticle({
+              siteUrl: wpConnection.wordpress_site_url,
+              apiKey: wpConnection.wordpress_api_key,
+              title: `Nouvelle réalisation — ${metier.label}`,
+              content: generic.article,
+              metaDescription: generic.article.slice(0, 155),
+              imageUrl: savedRealisation.photo_urls?.[0] || null,
+            });
+            await addChannelToRealisation(savedRealisation.id, { wordpress_url: wpResult.url });
+          }
+        } catch (e) {
+          // Silencieux : la réalisation reste utilisable sans le site.
+        }
+      }
+
+      // On rebascule directement sur la fiche de cette réalisation (dans
+      // l'onglet "Mes réalisations"), prête pour le partage.
+      navigation.navigate("HistoryTab", { screen: "RealisationDetail", params: { realisationId: savedRealisation.id } });
     } catch (e) {
-      Alert.alert("Erreur de génération", e.message || "Une erreur est survenue.");
+      Alert.alert("Erreur", e.message || "Impossible de créer cette réalisation.");
     } finally {
       setLoading(false);
     }
@@ -183,11 +225,6 @@ export default function CaptureScreen({ route, navigation }) {
               </TouchableOpacity>
             ))}
           </View>
-          {photoCount === 0 && (
-            <Text style={styles.hint}>
-              Sans photo, l'IA générera un contenu générique. Une photo rend le résultat bien plus précis.
-            </Text>
-          )}
 
           <Text style={styles.label}>Décris en quelques mots ce que tu as fait</Text>
           <TextInput
@@ -201,25 +238,7 @@ export default function CaptureScreen({ route, navigation }) {
             🎙️ Astuce : appuie sur le micro de ton clavier pour dicter à la voix au lieu d'écrire.
           </Text>
 
-          <Text style={styles.label}>Où veux-tu publier cette réalisation ?</Text>
-          <View style={styles.channelsWrap}>
-            {CHANNELS.map((c) => {
-              const active = channels.includes(c.id);
-              return (
-                <TouchableOpacity
-                  key={c.id}
-                  style={[styles.channelChip, active && styles.channelChipActive]}
-                  onPress={() => toggleChannel(c.id)}
-                >
-                  <Text style={[styles.channelChipText, active && styles.channelChipTextActive]}>
-                    {c.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
-          <Text style={styles.label}>Email du client</Text>
+          <Text style={styles.label}>Email du client (optionnel)</Text>
           <TextInput
             style={styles.input}
             placeholder="client@exemple.com"
@@ -228,6 +247,10 @@ export default function CaptureScreen({ route, navigation }) {
             value={email}
             onChangeText={setEmail}
           />
+          <Text style={styles.hint}>
+            Renseigné : l'email de demande d'avis Google part automatiquement. Le partage sur les
+            réseaux se fera juste après, depuis la fiche de la réalisation.
+          </Text>
 
           <TouchableOpacity
             style={[styles.submitButton, !canSubmit && styles.disabledButton]}
@@ -237,7 +260,7 @@ export default function CaptureScreen({ route, navigation }) {
             {loading ? (
               <ActivityIndicator color="white" />
             ) : (
-              <Text style={styles.submitButtonText}>✨ Générer le contenu</Text>
+              <Text style={styles.submitButtonText}>✅ Créer la réalisation</Text>
             )}
           </TouchableOpacity>
         </ScrollView>
@@ -281,18 +304,6 @@ const styles = StyleSheet.create({
   editBadgeText: { color: "white", fontSize: 12, fontWeight: "700" },
   hint: { fontSize: 11.5, color: "#94A3B8", marginTop: 10 },
   label: { marginTop: 24, marginBottom: 10, fontSize: 14, fontWeight: "700", color: "#334155" },
-  channelsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
-  channelChip: {
-    backgroundColor: "white",
-    borderRadius: 10,
-    paddingVertical: 9,
-    paddingHorizontal: 13,
-    borderWidth: 1.5,
-    borderColor: "#E2E8F0",
-  },
-  channelChipActive: { backgroundColor: "#0F172A", borderColor: "#0F172A" },
-  channelChipText: { fontSize: 13, fontWeight: "600", color: "#334155" },
-  channelChipTextActive: { color: "white" },
   input: {
     backgroundColor: "white",
     borderRadius: 10,

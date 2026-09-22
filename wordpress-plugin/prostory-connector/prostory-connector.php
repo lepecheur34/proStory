@@ -2,7 +2,7 @@
 /**
  * Plugin Name: ProStory Connector
  * Description: Reçoit les réalisations créées depuis l'appli mobile ProStory et les publie automatiquement dans un type de contenu dédié "Réalisations" (image à la une et méta-description SEO).
- * Version: 1.1.0
+ * Version: 1.2.0
  * Author: ProStory
  * Text Domain: prostory-connector
  */
@@ -153,7 +153,6 @@ function prostory_create_realisation(WP_REST_Request $request) {
     $content = wp_kses_post($request->get_param('content'));
     $meta_description = sanitize_text_field($request->get_param('meta_description'));
     $image_url = esc_url_raw($request->get_param('image_url'));
-    $metier = sanitize_text_field($request->get_param('metier'));
 
     if (empty($title) || empty($content)) {
         return new WP_Error('prostory_missing_fields', 'Les champs "title" et "content" sont requis.', array('status' => 400));
@@ -164,7 +163,7 @@ function prostory_create_realisation(WP_REST_Request $request) {
         'post_content' => $content,
         'post_status' => 'publish',
         'post_type' => PROSTORY_POST_TYPE,
-        'post_category' => prostory_get_or_create_category($metier),
+        'post_category' => prostory_get_or_create_category(),
     ), true);
 
     if (is_wp_error($post_id)) {
@@ -189,16 +188,12 @@ function prostory_create_realisation(WP_REST_Request $request) {
     );
 }
 
-// Crée (ou réutilise) une catégorie WordPress nommée d'après le métier de
-// l'artisan (ex: "Électricien"), pour que les réalisations restent
-// organisées si le site publie aussi d'autres contenus.
-function prostory_get_or_create_category($metier) {
-    if (!$metier) {
-        return array();
-    }
-    $term = term_exists($metier, 'category');
+// Toutes les réalisations vont dans une unique catégorie "Réalisations",
+// quel que soit le métier de l'artisan, pour rester simples à retrouver.
+function prostory_get_or_create_category() {
+    $term = term_exists('Réalisations', 'category');
     if (!$term) {
-        $term = wp_insert_term($metier, 'category');
+        $term = wp_insert_term('Réalisations', 'category');
     }
     return is_wp_error($term) ? array() : array((int) $term['term_id']);
 }

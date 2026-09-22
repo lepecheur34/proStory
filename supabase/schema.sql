@@ -35,7 +35,7 @@ create table if not exists public.realisations (
   id uuid primary key default gen_random_uuid(),
   user_id uuid references auth.users(id) on delete cascade not null,
   metier_id text not null,
-  client_email text not null,
+  client_email text,
   description text,
   photo_urls text[] default '{}',
   facebook text,
@@ -49,6 +49,9 @@ create table if not exists public.realisations (
 );
 
 alter table public.realisations add column if not exists wordpress_url text;
+-- L'email client est maintenant optionnel à la création (choix fait après,
+-- au moment du partage) : sans effet si déjà nullable.
+alter table public.realisations alter column client_email drop not null;
 
 alter table public.realisations enable row level security;
 

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
+  TextInput,
   Alert,
   ActivityIndicator,
   Dimensions,
@@ -15,7 +16,7 @@ import { getMetier } from "../data/metiers";
 import { useApp } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../context/ProfileContext";
-import { generateContent } from "../services/aiService";
+import { generateGenericContent } from "../services/aiService";
 import { sendReviewEmailWithFallback } from "../services/emailService";
 import { fetchReviewLink, withReviewLink } from "../services/socialAuthService";
 import { shareRealisation } from "../services/shareService";
@@ -29,7 +30,11 @@ const CHANNEL_META = {
   instagram: { icon: "📸", label: "Instagram" },
   linkedin: { icon: "💼", label: "LinkedIn" },
 };
-const ALL_CHANNEL_IDS = ["emailAvis", "facebook", "instagram", "linkedin"];
+const SOCIAL_CHANNEL_IDS = ["facebook", "instagram", "linkedin"];
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((value || "").trim());
+}
 
 function getSendButtonLabel(channelId, isSent) {
   if (channelId === "emailAvis") return isSent ? "Renvoyer l'email" : "Envoyer l'email";
@@ -45,18 +50,33 @@ function formatDate(iso) {
 
 export default function RealisationDetailScreen({ route, navigation }) {
   const { realisationId } = route.params;
-  const { realisations, markChannelSent, addChannelToRealisation, deleteRealisation } = useApp();
+  const { realisations, markChannelSent, addChannelToRealisation, deleteRealisation, refresh } = useApp();
   const { user } = useAuth();
   const { profile } = useProfile();
   const realisation = realisations.find((r) => r.id === realisationId);
   const [sendingChannel, setSendingChannel] = useState(null);
-  const [addingChannel, setAddingChannel] = useState(null);
   const [deleting, setDeleting] = useState(false);
+  const [checkingFreshList, setCheckingFreshList] = useState(!realisation);
+  const [reviewEmailInput, setReviewEmailInput] = useState("");
+
+  // Juste après création, cette fiche peut s'ouvrir avant que la liste en
+  // mémoire ait fini de se synchroniser (ou après un redémarrage avec un
+  // cache local périmé) : on force un rafraîchissement une fois avant de
+  // conclure que la réalisation n'existe vraiment plus.
+  useEffect(() => {
+    if (!realisation && checkingFreshList) {
+      refresh().finally(() => setCheckingFreshList(false));
+    }
+  }, [realisation, checkingFreshList, refresh]);
 
   if (!realisation) {
     return (
       <SafeAreaView style={styles.container}>
-        <Text style={styles.notFound}>Cette réalisation n'est plus disponible.</Text>
+        {checkingFreshList ? (
+          <ActivityIndicator style={styles.notFound} color="#0F172A" />
+        ) : (
+          <Text style={styles.notFound}>Cette réalisation n'est plus disponible.</Text>
+        )}
       </SafeAreaView>
     );
   }
@@ -65,37 +85,77 @@ export default function RealisationDetailScreen({ route, navigation }) {
   const sentChannels = realisation.sent_channels || [];
   const photos = realisation.photo_urls || [];
 
-  const presentChannels = [
-    realisation.email_corps ? "emailAvis" : null,
-    realisation.facebook ? "facebook" : null,
-    realisation.instagram ? "instagram" : null,
-    realisation.linkedin ? "linkedin" : null,
-  ].filter(Boolean);
-  const missingChannels = ALL_CHANNEL_IDS.filter((c) => !presentChannels.includes(c));
+  // Email avis Google et réseaux sociaux sont toujours proposés depuis cette
+  // fiche : le mail peut être envoyé ici même s'il n'y avait pas d'email
+  // client à la création, et le texte des réseaux est généré à la volée
+  // (générique pour l'instant, IA plus tard) au moment du partage. Les
+  // canaux déjà envoyés redescendent sous ceux encore en attente.
+  const visibleChannels = ["emailAvis", ...SOCIAL_CHANNEL_IDS].sort(
+    (a, b) => sentChannels.includes(a) - sentChannels.includes(b)
+  );
 
   const handleSend = async (channelId) => {
     setSendingChannel(channelId);
     try {
       if (channelId === "emailAvis") {
+        const targetEmail = realisation.client_email || reviewEmailInput.trim();
+        if (!isValidEmail(targetEmail)) {
+          Alert.alert("Email manquant", "Renseigne un email client valide pour envoyer la demande d'avis.");
+          return;
+        }
+
+        let emailObjet = realisation.email_objet;
+        let emailCorps = realisation.email_corps;
+        if (!realisation.client_email) {
+          const generic = generateGenericContent({
+            metierId: realisation.metier_id,
+            description: realisation.description,
+          });
+          emailObjet = generic.emailAvis.objet;
+          emailCorps = generic.emailAvis.corps;
+          await addChannelToRealisation(realisation.id, {
+            client_email: targetEmail,
+            email_objet: emailObjet,
+            email_corps: emailCorps,
+          });
+        }
+
+        const reviewLink = user ? await fetchReviewLink(user.id).catch(() => null) : null;
+        const emailAvis = withReviewLink({ objet: emailObjet, corps: emailCorps }, reviewLink);
+
         const result = await sendReviewEmailWithFallback({
-          to: realisation.client_email,
-          subject: realisation.email_objet,
-          body: realisation.email_corps,
+          to: targetEmail,
+          subject: emailAvis.objet,
+          body: emailAvis.corps,
           senderName: profile?.nom_entreprise,
         });
         if (result.method === "automatic") {
           await markChannelSent(realisation.id, channelId);
-          Alert.alert("Email envoyé ✅", `L'avis a été envoyé automatiquement à ${realisation.client_email}.`);
+          Alert.alert("Email envoyé ✅", `L'avis a été envoyé automatiquement à ${targetEmail}.`);
         } else if (result.method === "manual") {
           await markChannelSent(realisation.id, channelId);
         }
         return;
       }
 
+      // Pas encore de texte pour ce canal : on le génère maintenant, à
+      // partir de l'article déjà créé (texte générique pour l'instant,
+      // l'IA sera branchée ici plus tard), et on le sauvegarde avant de
+      // partager.
+      let content = realisation[channelId];
+      if (!content) {
+        const generic = generateGenericContent({
+          metierId: realisation.metier_id,
+          description: realisation.description,
+        });
+        content = generic[channelId];
+        await addChannelToRealisation(realisation.id, { [channelId]: content });
+      }
+
       const shared = await shareRealisation({
         realisationId: realisation.id,
         channel: channelId,
-        content: realisation[channelId],
+        content,
         pageUrl: realisation.wordpress_url || null,
       });
       if (shared) {
@@ -105,33 +165,6 @@ export default function RealisationDetailScreen({ route, navigation }) {
       Alert.alert("Erreur", e.message || "Impossible d'envoyer pour l'instant.");
     } finally {
       setSendingChannel(null);
-    }
-  };
-
-  const handleAddChannel = async (channelId) => {
-    setAddingChannel(channelId);
-    try {
-      // On régénère un contenu complet (texte seul, sans repasser les photos)
-      // et on ne garde que le canal demandé.
-      const content = await generateContent({
-        photos: [],
-        metierId: realisation.metier_id,
-        profile,
-        description: realisation.description,
-      });
-      let patch;
-      if (channelId === "emailAvis") {
-        const reviewLink = user ? await fetchReviewLink(user.id).catch(() => null) : null;
-        const emailAvis = withReviewLink(content.emailAvis, reviewLink);
-        patch = { email_objet: emailAvis.objet, email_corps: emailAvis.corps };
-      } else {
-        patch = { [channelId]: content[channelId] };
-      }
-      await addChannelToRealisation(realisation.id, patch);
-    } catch (e) {
-      Alert.alert("Erreur", e.message || "Impossible de générer ce canal pour l'instant.");
-    } finally {
-      setAddingChannel(null);
     }
   };
 
@@ -188,9 +221,11 @@ export default function RealisationDetailScreen({ route, navigation }) {
           <View style={styles.metaRow}>
             <Text style={styles.metaText}>📅 {formatDate(realisation.created_at)}</Text>
           </View>
-          <View style={styles.metaRow}>
-            <Text style={styles.metaText}>👤 {realisation.client_email}</Text>
-          </View>
+          {realisation.client_email ? (
+            <View style={styles.metaRow}>
+              <Text style={styles.metaText}>👤 {realisation.client_email}</Text>
+            </View>
+          ) : null}
           {realisation.description ? (
             <View style={styles.noteBox}>
               <Text style={styles.noteText}>"{realisation.description}"</Text>
@@ -199,14 +234,18 @@ export default function RealisationDetailScreen({ route, navigation }) {
         </View>
 
         <Text style={styles.sectionEyebrow}>CANAUX</Text>
-        {presentChannels.map((channelId) => {
+        {visibleChannels.map((channelId) => {
           const meta = CHANNEL_META[channelId];
           const isSent = sentChannels.includes(channelId);
           const isSending = sendingChannel === channelId;
+          const needsEmailInput = channelId === "emailAvis" && !realisation.client_email;
+          const hasContent =
+            channelId === "emailAvis" ? Boolean(realisation.email_objet) : Boolean(realisation[channelId]);
           const content =
             channelId === "emailAvis"
               ? `${realisation.email_objet}\n\n${realisation.email_corps}`
               : realisation[channelId];
+          const canSend = channelId !== "emailAvis" || Boolean(realisation.client_email) || isValidEmail(reviewEmailInput);
 
           return (
             <View key={channelId} style={styles.channelCard}>
@@ -223,13 +262,29 @@ export default function RealisationDetailScreen({ route, navigation }) {
                   </Text>
                 </View>
               </View>
-              <Text style={styles.channelContent} numberOfLines={4}>
-                {content}
-              </Text>
+              {needsEmailInput ? (
+                <>
+                  <Text style={styles.channelHint}>
+                    Renseigne l'email du client pour lui envoyer la demande d'avis Google.
+                  </Text>
+                  <TextInput
+                    style={styles.emailInput}
+                    placeholder="client@exemple.com"
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    value={reviewEmailInput}
+                    onChangeText={setReviewEmailInput}
+                  />
+                </>
+              ) : (
+                <Text style={styles.channelContent} numberOfLines={4}>
+                  {hasContent ? content : "Le texte sera généré au moment du partage."}
+                </Text>
+              )}
               <TouchableOpacity
-                style={[styles.sendButton, isSent && styles.sendButtonSecondary]}
+                style={[styles.sendButton, isSent && styles.sendButtonSecondary, !canSend && styles.sendButtonDisabled]}
                 onPress={() => handleSend(channelId)}
-                disabled={isSending}
+                disabled={isSending || !canSend}
               >
                 {isSending ? (
                   <ActivityIndicator color={isSent ? "#0F172A" : "white"} size="small" />
@@ -242,34 +297,6 @@ export default function RealisationDetailScreen({ route, navigation }) {
             </View>
           );
         })}
-
-        {missingChannels.length > 0 && (
-          <>
-            <Text style={styles.sectionEyebrow}>AJOUTER UN CANAL</Text>
-            <View style={styles.addChannelsWrap}>
-              {missingChannels.map((channelId) => {
-                const meta = CHANNEL_META[channelId];
-                const isAdding = addingChannel === channelId;
-                return (
-                  <TouchableOpacity
-                    key={channelId}
-                    style={styles.addChip}
-                    onPress={() => handleAddChannel(channelId)}
-                    disabled={Boolean(addingChannel)}
-                  >
-                    {isAdding ? (
-                      <ActivityIndicator size="small" color="#334155" />
-                    ) : (
-                      <Text style={styles.addChipText}>
-                        + {meta.icon} {meta.label}
-                      </Text>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          </>
-        )}
 
         <TouchableOpacity style={styles.deleteButton} onPress={handleDelete} disabled={deleting}>
           {deleting ? (
@@ -358,24 +385,23 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 10.5, fontWeight: "700", color: "#64748B" },
   statusTextSent: { color: "#166534" },
   channelContent: { fontSize: 13, color: "#475569", marginBottom: 14, lineHeight: 19 },
+  channelHint: { fontSize: 12, color: "#94A3B8", marginBottom: 10 },
+  emailInput: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    marginBottom: 14,
+  },
   sendButton: { backgroundColor: "#0F172A", borderRadius: 11, paddingVertical: 12, alignItems: "center" },
   sendButtonSecondary: { backgroundColor: "#F1F5F9" },
+  sendButtonDisabled: { opacity: 0.4 },
   sendButtonText: { color: "white", fontWeight: "700", fontSize: 13 },
   sendButtonTextSecondary: { color: "#334155" },
 
-  addChannelsWrap: { flexDirection: "row", flexWrap: "wrap", gap: 10, marginHorizontal: 20 },
-  addChip: {
-    backgroundColor: "white",
-    borderRadius: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderWidth: 1.5,
-    borderColor: "#E2E8F0",
-    borderStyle: "dashed",
-    minWidth: 90,
-    alignItems: "center",
-  },
-  addChipText: { fontSize: 12.5, fontWeight: "700", color: "#334155" },
   deleteButton: { alignItems: "center", paddingVertical: 16, marginTop: 24, marginHorizontal: 20 },
   deleteButtonText: { color: "#DC2626", fontWeight: "700", fontSize: 13.5 },
 });

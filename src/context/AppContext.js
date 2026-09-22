@@ -85,6 +85,17 @@ export function AppProvider({ children }) {
     return urls;
   };
 
+  // NB : toutes les fonctions ci-dessous mettent à jour `realisations` via la
+  // forme fonctionnelle de setRealisations(prev => ...), jamais en lisant la
+  // variable `realisations` capturée à la création de la fonction. Un écran
+  // (ex: CaptureScreen) peut enchaîner plusieurs de ces appels dans un seul
+  // handler async ; entre deux `await`, ce composant ne se re-rend pas
+  // forcément, donc les références qu'il a capturées via useApp() peuvent
+  // rester basées sur un instantané de `realisations` antérieur à l'appel
+  // précédent (ex: markChannelSent appelé juste après addRealisation ne
+  // trouvait pas encore la réalisation tout juste créée, et s'arrêtait sans
+  // rien enregistrer). La forme fonctionnelle lit toujours l'état réel au
+  // moment de l'exécution, quelle que soit l'ancienneté de la closure.
   const addRealisation = async (realisation) => {
     if (isSupabaseConfigured && user) {
       const photoUrls = await uploadPhotos(realisation.photos || []);
@@ -106,9 +117,11 @@ export function AppProvider({ children }) {
         .select()
         .single();
       if (error) throw error;
-      const next = [data, ...realisations];
-      setRealisations(next);
-      saveToCache(next);
+      setRealisations((prev) => {
+        const next = [data, ...prev];
+        saveToCache(next);
+        return next;
+      });
       return data;
     }
 
@@ -123,18 +136,26 @@ export function AppProvider({ children }) {
       sent_channels: [],
       ...realisation,
     };
-    const next = [local, ...realisations];
-    setRealisations(next);
-    saveToCache(next);
+    setRealisations((prev) => {
+      const next = [local, ...prev];
+      saveToCache(next);
+      return next;
+    });
     return local;
   };
 
   // Marque un canal comme envoyé pour une réalisation donnée (après un vrai
   // envoi d'email ou un partage vers un réseau social).
   const markChannelSent = async (realisationId, channelId) => {
-    const target = realisations.find((r) => r.id === realisationId);
-    if (!target) return;
-    const sentChannels = [...new Set([...(target.sent_channels || []), channelId])];
+    let sentChannels = [channelId];
+    setRealisations((prev) => {
+      const target = prev.find((r) => r.id === realisationId);
+      sentChannels = [...new Set([...(target?.sent_channels || []), channelId])];
+      if (!target) return prev;
+      const next = prev.map((r) => (r.id === realisationId ? { ...r, sent_channels: sentChannels } : r));
+      saveToCache(next);
+      return next;
+    });
 
     if (isSupabaseConfigured && user) {
       const { error } = await supabase
@@ -143,10 +164,6 @@ export function AppProvider({ children }) {
         .eq("id", realisationId);
       if (error) throw error;
     }
-
-    const next = realisations.map((r) => (r.id === realisationId ? { ...r, sent_channels: sentChannels } : r));
-    setRealisations(next);
-    saveToCache(next);
   };
 
   // Ajoute du contenu pour un canal qui n'avait pas été choisi à la création
@@ -160,16 +177,23 @@ export function AppProvider({ children }) {
         .select()
         .single();
       if (error) throw error;
-      const next = realisations.map((r) => (r.id === realisationId ? data : r));
-      setRealisations(next);
-      saveToCache(next);
+      setRealisations((prev) => {
+        const exists = prev.some((r) => r.id === realisationId);
+        const next = exists ? prev.map((r) => (r.id === realisationId ? data : r)) : [data, ...prev];
+        saveToCache(next);
+        return next;
+      });
       return data;
     }
 
-    const next = realisations.map((r) => (r.id === realisationId ? { ...r, ...patch } : r));
-    setRealisations(next);
-    saveToCache(next);
-    return next.find((r) => r.id === realisationId);
+    let updated;
+    setRealisations((prev) => {
+      const next = prev.map((r) => (r.id === realisationId ? { ...r, ...patch } : r));
+      updated = next.find((r) => r.id === realisationId);
+      saveToCache(next);
+      return next;
+    });
+    return updated;
   };
 
   // Supprime définitivement une réalisation (protégé par RLS : chacun ne
@@ -182,9 +206,11 @@ export function AppProvider({ children }) {
       if (error) throw error;
     }
 
-    const next = realisations.filter((r) => r.id !== realisationId);
-    setRealisations(next);
-    saveToCache(next);
+    setRealisations((prev) => {
+      const next = prev.filter((r) => r.id !== realisationId);
+      saveToCache(next);
+      return next;
+    });
   };
 
   return (

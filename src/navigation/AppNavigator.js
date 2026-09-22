@@ -14,7 +14,6 @@ import ForgotPasswordScreen from "../screens/ForgotPasswordScreen";
 import ProfileFormScreen from "../screens/ProfileFormScreen";
 import HomeScreen from "../screens/HomeScreen";
 import CaptureScreen from "../screens/CaptureScreen";
-import ResultScreen from "../screens/ResultScreen";
 import HistoryScreen from "../screens/HistoryScreen";
 import RealisationDetailScreen from "../screens/RealisationDetailScreen";
 import AccountScreen from "../screens/AccountScreen";
@@ -46,7 +45,6 @@ function HomeStackNavigator() {
     <HomeStack.Navigator screenOptions={headerOptions}>
       <HomeStack.Screen name="Home" component={HomeScreen} options={{ title: "ProStory" }} />
       <HomeStack.Screen name="Capture" component={CaptureScreen} options={{ title: "Nouvelle réalisation" }} />
-      <HomeStack.Screen name="Result" component={ResultScreen} options={{ title: "Résultat IA" }} />
     </HomeStack.Navigator>
   );
 }

@@ -75,6 +75,30 @@ function demoContent(metier) {
   };
 }
 
+// Contenu générique (aucun appel réseau, instantané) utilisé pour la
+// création d'une réalisation et pour générer un canal à la volée au moment
+// du partage, tant qu'il n'a pas encore de texte. La vraie génération IA
+// (generateContent ci-dessous) sera rebranchée sur ce flux plus tard.
+export function generateGenericContent({ metierId, description }) {
+  const metier = getMetier(metierId);
+  const detail = description?.trim();
+  const base = detail || `une nouvelle intervention de ${metier.label.toLowerCase()}`;
+  const articleIntro = base.charAt(0).toUpperCase() + base.slice(1);
+
+  return {
+    facebook: `✨ Réalisation terminée : ${base}. Notre équipe de ${metier.label.toLowerCase()} a mis tout son savoir-faire dans ce projet. Merci pour votre confiance ! 🙌`,
+    instagram: `${base} 💪 ${metier.hashtags.join(" ")}`,
+    linkedin: `Nous venons de finaliser une nouvelle intervention : ${base}. Ce type de projet illustre notre exigence de qualité au quotidien.`,
+    emailAvis: {
+      objet: "Merci pour votre confiance 🙏",
+      corps: `Bonjour,\n\nMerci de nous avoir fait confiance pour cette intervention${
+        detail ? ` (${detail})` : ""
+      } ! Si vous êtes satisfait(e) du résultat, cela nous aiderait énormément que vous preniez 30 secondes pour laisser un avis Google.\n\nMerci encore,\nL'équipe`,
+    },
+    article: `${articleIntro}.\n\nRéalisation effectuée par notre équipe de ${metier.label.toLowerCase()}.`,
+  };
+}
+
 export async function generateContent({ photos, metierId, profile, description }) {
   const metier = getMetier(metierId);
   const hasPhotos = photos && photos.length > 0;
