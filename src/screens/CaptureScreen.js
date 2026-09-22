@@ -19,7 +19,7 @@ import { getMetier } from "../data/metiers";
 import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../context/ProfileContext";
 import { useApp } from "../context/AppContext";
-import { generateGenericContent } from "../services/aiService";
+import { generateGenericContent, generateArticleContent } from "../services/aiService";
 import { fetchConnections, fetchReviewLink, withReviewLink } from "../services/socialAuthService";
 import { createWordPressArticle } from "../services/wordpressService";
 import { sendReviewEmailWithFallback } from "../services/emailService";
@@ -161,8 +161,11 @@ export default function CaptureScreen({ route, navigation }) {
         }
       }
 
-      // Publication automatique sur le site WordPress connecté, s'il y en
-      // a un (texte générique pour l'instant, l'IA arrivera plus tard).
+      // Publication automatique sur le site WordPress connecté, s'il y en a
+      // un : article optimisé SEO (titre, H1, méta-description, contenu)
+      // généré par l'IA à partir de la description. La première photo sert
+      // d'image à la une, les suivantes sont intégrées par le plugin dans un
+      // carousel sur la page.
       if (user) {
         try {
           const connections = await fetchConnections(user.id);
@@ -170,13 +173,17 @@ export default function CaptureScreen({ route, navigation }) {
             (c) => c.provider === "wordpress" && c.wordpress_site_url && c.wordpress_api_key
           );
           if (wpConnection) {
+            const article = await generateArticleContent({ metierId, profile, description });
+            const photoUrls = savedRealisation.photo_urls || [];
             const wpResult = await createWordPressArticle({
               siteUrl: wpConnection.wordpress_site_url,
               apiKey: wpConnection.wordpress_api_key,
-              title: `Nouvelle réalisation — ${metier.label}`,
-              content: generic.article,
-              metaDescription: generic.article.slice(0, 155),
-              imageUrl: savedRealisation.photo_urls?.[0] || null,
+              title: article.title,
+              h1: article.h1,
+              content: article.content,
+              metaDescription: article.metaDescription,
+              imageUrl: photoUrls[0] || null,
+              galleryUrls: photoUrls.slice(1),
             });
             await addChannelToRealisation(savedRealisation.id, { wordpress_url: wpResult.url });
           }

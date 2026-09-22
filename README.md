@@ -15,7 +15,7 @@ inscription, historique synchronisé dans le cloud.
 - Prise de photos (optionnel, jusqu'à 3), **description libre de
   l'intervention** (dictée vocale possible via le micro du clavier), choix
   des canaux à utiliser
-- Génération IA réelle du contenu (si tu configures une clé API Anthropic —
+- Génération IA réelle du contenu (si tu configures une clé API OpenAI —
   sinon **mode démo automatique**, l'appli reste testable sans rien configurer)
 - Édition du texte généré avant validation
 - **Envoi automatique de l'email d'avis dès la validation** de la
@@ -121,10 +121,10 @@ npm install
 Sans cette étape, l'appli fonctionne en **mode démo** (texte d'exemple
 généré instantanément).
 
-1. Récupère une clé API sur [console.anthropic.com](https://console.anthropic.com)
+1. Récupère une clé API sur [platform.openai.com](https://platform.openai.com/api-keys)
 2. Colle-la dans `.env` :
    ```
-   EXPO_PUBLIC_ANTHROPIC_API_KEY=ta-cle-ici
+   EXPO_PUBLIC_OPENAI_API_KEY=ta-cle-ici
    ```
 
 ⚠️ Pour une vraie mise en prod, ne mets jamais une clé API directement dans
@@ -223,7 +223,7 @@ prostory/
 │   ├── navigation/
 │   │   └── AppNavigator.js          # Auth → Onboarding (si besoin) → Onglets
 │   ├── services/
-│   │   ├── aiService.js             # Appel à l'API Anthropic (ou mode démo)
+│   │   ├── aiService.js             # Appel à l'API OpenAI (ou mode démo)
 │   │   ├── emailService.js          # Envoi Brevo + repli appli mail
 │   │   ├── supabaseClient.js
 │   │   ├── socialAuthService.js     # Lien d'avis Google

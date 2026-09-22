@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: ProStory Connector
- * Description: Reçoit les réalisations créées depuis l'appli mobile ProStory et les publie automatiquement dans un type de contenu dédié "Réalisations", avec une mise en page premium (fiche + galerie) fournie par le plugin lui-même, quel que soit le thème du site.
- * Version: 1.3.0
+ * Description: Reçoit les réalisations créées depuis l'appli mobile ProStory (articles optimisés SEO générés par IA : titre, H1, méta-description, contenu) et les publie automatiquement dans un type de contenu dédié "Réalisations", avec une mise en page premium (fiche + galerie + carousel photo) fournie par le plugin lui-même, quel que soit le thème du site.
+ * Version: 1.4.0
  * Author: ProStory
  * Text Domain: prostory-connector
  */
@@ -11,7 +11,7 @@ if (!defined('ABSPATH')) {
     exit; // Accès direct au fichier interdit.
 }
 
-define('PROSTORY_VERSION', '1.3.0');
+define('PROSTORY_VERSION', '1.4.0');
 define('PROSTORY_OPTION_API_KEY', 'prostory_api_key');
 define('PROSTORY_POST_TYPE', 'prostory_realisation');
 define('PROSTORY_CATEGORY_SLUG', 'realisations');
@@ -80,17 +80,42 @@ function prostory_is_realisations_listing() {
     return is_post_type_archive(PROSTORY_POST_TYPE) || is_category(PROSTORY_CATEGORY_SLUG);
 }
 
-function prostory_enqueue_styles() {
-    if (is_singular(PROSTORY_POST_TYPE) || prostory_is_realisations_listing()) {
-        wp_enqueue_style(
-            'prostory-connector',
-            PROSTORY_PLUGIN_URL . 'assets/prostory-style.css',
+function prostory_enqueue_assets() {
+    if (!is_singular(PROSTORY_POST_TYPE) && !prostory_is_realisations_listing()) {
+        return;
+    }
+    wp_enqueue_style(
+        'prostory-connector',
+        PROSTORY_PLUGIN_URL . 'assets/prostory-style.css',
+        array(),
+        PROSTORY_VERSION
+    );
+    if (is_singular(PROSTORY_POST_TYPE)) {
+        wp_enqueue_script(
+            'prostory-connector-carousel',
+            PROSTORY_PLUGIN_URL . 'assets/prostory-carousel.js',
             array(),
-            PROSTORY_VERSION
+            PROSTORY_VERSION,
+            true
         );
     }
 }
-add_action('wp_enqueue_scripts', 'prostory_enqueue_styles');
+add_action('wp_enqueue_scripts', 'prostory_enqueue_assets');
+
+// Le titre SEO (balise <title>) peut différer du H1 affiché sur la page :
+// on le stocke à part et on le fait passer prioritairement, pour les thèmes
+// modernes (support "title-tag") comme pour Yoast/RankMath si l'un des deux
+// est actif sur le site.
+function prostory_document_title_parts($parts) {
+    if (is_singular(PROSTORY_POST_TYPE)) {
+        $seo_title = get_post_meta(get_queried_object_id(), '_prostory_seo_title', true);
+        if ($seo_title) {
+            $parts['title'] = $seo_title;
+        }
+    }
+    return $parts;
+}
+add_filter('document_title_parts', 'prostory_document_title_parts');
 
 function prostory_template_include($template) {
     if (is_singular(PROSTORY_POST_TYPE)) {
@@ -215,16 +240,21 @@ function prostory_check_api_key(WP_REST_Request $request) {
 
 function prostory_create_realisation(WP_REST_Request $request) {
     $title = sanitize_text_field($request->get_param('title'));
+    $h1 = sanitize_text_field($request->get_param('h1'));
     $content = wp_kses_post($request->get_param('content'));
     $meta_description = sanitize_text_field($request->get_param('meta_description'));
     $image_url = esc_url_raw($request->get_param('image_url'));
+    $gallery_urls = $request->get_param('gallery_urls');
+    $gallery_urls = is_array($gallery_urls) ? array_filter(array_map('esc_url_raw', $gallery_urls)) : array();
 
     if (empty($title) || empty($content)) {
         return new WP_Error('prostory_missing_fields', 'Les champs "title" et "content" sont requis.', array('status' => 400));
     }
 
     $post_id = wp_insert_post(array(
-        'post_title' => $title,
+        // Le H1 affiché sur la page peut différer du titre SEO ; à défaut,
+        // on retombe sur le titre SEO.
+        'post_title' => $h1 ?: $title,
         'post_content' => $content,
         'post_status' => 'publish',
         'post_type' => PROSTORY_POST_TYPE,
@@ -234,6 +264,13 @@ function prostory_create_realisation(WP_REST_Request $request) {
     if (is_wp_error($post_id)) {
         return new WP_Error('prostory_insert_failed', $post_id->get_error_message(), array('status' => 500));
     }
+
+    // Titre SEO (balise <title>), distinct du H1 : lu par prostory_document_title_parts()
+    // ci-dessus, et dupliqué dans les champs Yoast/RankMath pour compatibilité
+    // si l'un de ces plugins est actif sur le site.
+    update_post_meta($post_id, '_prostory_seo_title', $title);
+    update_post_meta($post_id, '_yoast_wpseo_title', $title);
+    update_post_meta($post_id, 'rank_math_title', $title);
 
     if ($meta_description) {
         // Compatible avec les champs de méta-description Yoast SEO et
@@ -245,6 +282,10 @@ function prostory_create_realisation(WP_REST_Request $request) {
 
     if ($image_url) {
         prostory_set_featured_image($post_id, $image_url);
+    }
+
+    if (!empty($gallery_urls)) {
+        prostory_set_gallery($post_id, $gallery_urls);
     }
 
     return array(
@@ -273,5 +314,25 @@ function prostory_set_featured_image($post_id, $image_url) {
     $attachment_id = media_sideload_image($image_url, $post_id, null, 'id');
     if (!is_wp_error($attachment_id)) {
         set_post_thumbnail($post_id, $attachment_id);
+    }
+}
+
+// Télécharge les photos restantes (en plus de l'image à la une) et les
+// enregistre comme galerie de l'article : c'est ce que le gabarit
+// single-realisation.php affiche sous forme de carousel.
+function prostory_set_gallery($post_id, $gallery_urls) {
+    require_once ABSPATH . 'wp-admin/includes/media.php';
+    require_once ABSPATH . 'wp-admin/includes/file.php';
+    require_once ABSPATH . 'wp-admin/includes/image.php';
+
+    $attachment_ids = array();
+    foreach ($gallery_urls as $url) {
+        $attachment_id = media_sideload_image($url, $post_id, null, 'id');
+        if (!is_wp_error($attachment_id)) {
+            $attachment_ids[] = (int) $attachment_id;
+        }
+    }
+    if (!empty($attachment_ids)) {
+        update_post_meta($post_id, '_prostory_gallery_ids', $attachment_ids);
     }
 }

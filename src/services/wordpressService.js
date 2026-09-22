@@ -46,8 +46,20 @@ export async function testWordPressConnection({ siteUrl, apiKey }) {
 }
 
 // Publie une réalisation comme article sur le site WordPress connecté.
+// `h1` (optionnel) sert de titre affiché sur la page si différent du `title`
+// SEO ; `galleryUrls` (optionnel) sont les photos, en plus de `imageUrl`
+// (image à la une), intégrées par le plugin dans un carousel sur la page.
 // Retourne { id, url } (l'URL du nouvel article) fournis par le plugin.
-export async function createWordPressArticle({ siteUrl, apiKey, title, content, metaDescription, imageUrl }) {
+export async function createWordPressArticle({
+  siteUrl,
+  apiKey,
+  title,
+  h1,
+  content,
+  metaDescription,
+  imageUrl,
+  galleryUrls,
+}) {
   const response = await fetch(`${siteUrl}/wp-json/prostory/v1/realisations`, {
     method: "POST",
     headers: {
@@ -56,9 +68,11 @@ export async function createWordPressArticle({ siteUrl, apiKey, title, content, 
     },
     body: JSON.stringify({
       title,
+      h1: h1 || undefined,
       content,
       meta_description: metaDescription,
       image_url: imageUrl || undefined,
+      gallery_urls: galleryUrls && galleryUrls.length ? galleryUrls : undefined,
     }),
   });
   const data = await response.json();

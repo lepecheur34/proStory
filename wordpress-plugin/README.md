@@ -35,10 +35,13 @@ Authorization: Bearer <clé API>
 Content-Type: application/x-www-form-urlencoded (ou JSON)
 
 Paramètres :
-  title             (requis)  Titre de l'article
-  content           (requis)  Corps de l'article (HTML basique autorisé)
+  title             (requis)    Titre SEO (balise <title>, et Yoast/RankMath si présents)
+  h1                (optionnel) Titre affiché en haut de l'article ; à défaut, reprend "title"
+  content           (requis)    Corps de l'article (HTML basique autorisé)
   meta_description  (optionnel) Description SEO (Yoast/RankMath si présents)
   image_url         (optionnel) URL publique de la photo à mettre en image à la une
+  gallery_urls      (optionnel) Tableau d'URLs publiques de photos supplémentaires,
+                                 affichées dans un carousel sur la fiche
 
 Réponse (200) :
   { "id": 123, "url": "https://<site-wordpress>/mon-article/" }

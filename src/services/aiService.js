@@ -1,7 +1,39 @@
 import { getMetier } from "../data/metiers";
 
-const API_KEY = process.env.EXPO_PUBLIC_ANTHROPIC_API_KEY;
-const API_URL = "https://api.anthropic.com/v1/messages";
+const API_KEY = process.env.EXPO_PUBLIC_OPENAI_API_KEY;
+const API_URL = "https://api.openai.com/v1/chat/completions";
+const MODEL = "gpt-4o-mini";
+
+// Appelle l'API OpenAI (Chat Completions) et retourne l'objet JSON répondu
+// par le modèle. `response_format: json_object` garantit un JSON valide côté
+// OpenAI (sans balises markdown à retirer), à condition que le mot "JSON"
+// apparaisse dans le prompt — c'est le cas dans tous nos prompts.
+async function callOpenAI(content, maxTokens) {
+  const response = await fetch(API_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      max_tokens: maxTokens,
+      response_format: { type: "json_object" },
+      messages: [{ role: "user", content }],
+    }),
+  });
+
+  if (!response.ok) {
+    const errText = await response.text();
+    throw new Error(`Erreur API (${response.status}) : ${errText}`);
+  }
+
+  const data = await response.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (!text) throw new Error("Réponse IA vide");
+
+  return parseJsonResponse(text);
+}
 
 // Convertit une image locale (uri) en base64 pour l'envoyer à l'API.
 async function toBase64(uri) {
@@ -60,6 +92,35 @@ function parseJsonResponse(text) {
   return JSON.parse(cleaned);
 }
 
+function buildArticlePrompt(metier, profile, description) {
+  const identite = profile?.nom_entreprise
+    ? `L'entreprise s'appelle "${profile.nom_entreprise}"${profile.ville ? `, basée à ${profile.ville}` : ""}.`
+    : "";
+  const savoirFaire = profile?.description
+    ? `Voici comment l'artisan décrit lui-même son savoir-faire, reprends cet esprit dans le ton : "${profile.description}"`
+    : "";
+  const noteArtisan = description?.trim()
+    ? `L'artisan a décrit lui-même ce qu'il a fait, utilise ça comme base factuelle principale, sans inventer de détails absents (pas de nom de client, pas d'adresse précise) : "${description.trim()}"`
+    : "Aucune description fournie par l'artisan : rédige un article générique mais crédible pour ce métier, sans inventer de détails trop spécifiques.";
+
+  return `Tu es un rédacteur SEO pour le site web d'un(e) ${metier.label.toLowerCase()}.
+Ton de la marque : ${metier.ton}.
+${identite}
+${savoirFaire}
+${noteArtisan}
+
+Rédige un article de blog optimisé SEO présentant cette réalisation, prêt à publier sur le site de l'artisan. Ton professionnel et engageant, orienté confiance/conversion pour un client potentiel, entre 150 et 250 mots, structuré en 2 à 4 paragraphes.
+
+Réponds UNIQUEMENT avec un objet JSON valide (pas de markdown, pas de texte autour), au format exact suivant :
+
+{
+  "title": "titre SEO de la page (balise <title>), 50 à 60 caractères, avec le métier et un mot-clé pertinent",
+  "h1": "titre affiché en haut de l'article (H1), accrocheur, peut différer légèrement du title",
+  "metaDescription": "méta-description SEO, 140 à 155 caractères, incitant au clic",
+  "content": "corps de l'article en HTML simple, uniquement des balises <p>, pas de <script> ni de style"
+}`;
+}
+
 function demoContent(metier) {
   // Contenu de démonstration utilisé si aucune clé API n'est configurée,
   // pour que l'appli reste testable immédiatement sans setup.
@@ -99,6 +160,39 @@ export function generateGenericContent({ metierId, description }) {
   };
 }
 
+function demoArticleContent(metier, description) {
+  // Pas de clé API configurée -> article de démonstration, pas d'appel réseau.
+  const detail = description?.trim();
+  const base = detail || `une nouvelle intervention de ${metier.label.toLowerCase()}`;
+  const intro = base.charAt(0).toUpperCase() + base.slice(1);
+  return {
+    title: `${metier.label} — réalisation récente`,
+    h1: `Une nouvelle réalisation signée notre équipe de ${metier.label.toLowerCase()}`,
+    metaDescription: `Découvrez notre dernière réalisation en tant que ${metier.label.toLowerCase()} : ${base}.`.slice(
+      0,
+      155
+    ),
+    content: `<p>${intro}.</p><p>Réalisation effectuée par notre équipe de ${metier.label.toLowerCase()}, avec le soin et le sérieux qui nous caractérisent.</p>`,
+    _demo: true,
+  };
+}
+
+// Article de blog optimisé SEO (titre, H1, méta-description, corps),
+// destiné à être publié sur le site WordPress connecté de l'artisan. Séparé
+// de generateGenericContent (réseaux sociaux + email), qui reste instantané
+// et sans appel réseau : cet article, lui, vaut la peine d'attendre un vrai
+// appel IA pour être réellement optimisé SEO.
+export async function generateArticleContent({ metierId, profile, description }) {
+  const metier = getMetier(metierId);
+
+  if (!API_KEY) {
+    await new Promise((r) => setTimeout(r, 900));
+    return demoArticleContent(metier, description);
+  }
+
+  return callOpenAI(buildArticlePrompt(metier, profile, description), 1200);
+}
+
 export async function generateContent({ photos, metierId, profile, description }) {
   const metier = getMetier(metierId);
   const hasPhotos = photos && photos.length > 0;
@@ -109,46 +203,17 @@ export async function generateContent({ photos, metierId, profile, description }
     return demoContent(metier);
   }
 
-  const imageBlocks = hasPhotos
+  const imageParts = hasPhotos
     ? await Promise.all(
         photos.map(async (uri) => ({
-          type: "image",
-          source: {
-            type: "base64",
-            media_type: "image/jpeg",
-            data: await toBase64(uri),
-          },
+          type: "image_url",
+          image_url: { url: `data:image/jpeg;base64,${await toBase64(uri)}` },
         }))
       )
     : [];
 
-  const response = await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": API_KEY,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1000,
-      messages: [
-        {
-          role: "user",
-          content: [...imageBlocks, { type: "text", text: buildPrompt(metier, profile, hasPhotos, description) }],
-        },
-      ],
-    }),
-  });
-
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Erreur API (${response.status}) : ${errText}`);
-  }
-
-  const data = await response.json();
-  const textBlock = data.content.find((b) => b.type === "text");
-  if (!textBlock) throw new Error("Réponse IA vide");
-
-  return parseJsonResponse(textBlock.text);
+  return callOpenAI(
+    [{ type: "text", text: buildPrompt(metier, profile, hasPhotos, description) }, ...imageParts],
+    1000
+  );
 }
