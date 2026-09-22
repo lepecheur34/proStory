@@ -1,0 +1,252 @@
+/* ProStory Connector — mise en page premium des réalisations.
+   Chargée uniquement sur la fiche réalisation et la page qui les liste. */
+
+.prostory-single,
+.prostory-archive {
+  --prostory-gold: #b8935a;
+  --prostory-gold-light: #e8c99b;
+  --prostory-ink: #0f172a;
+  --prostory-slate: #475569;
+  --prostory-mist: #94a3b8;
+  --prostory-border: #e2e8f0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--prostory-ink);
+  box-sizing: border-box;
+}
+
+.prostory-single *,
+.prostory-archive * {
+  box-sizing: border-box;
+}
+
+.prostory-badge {
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--prostory-gold);
+  margin-bottom: 14px;
+}
+
+/* ---------- Fiche réalisation ---------- */
+
+.prostory-single {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 20px 80px;
+}
+
+.prostory-hero {
+  position: relative;
+  height: 46vw;
+  max-height: 480px;
+  min-height: 260px;
+  background-size: cover;
+  background-position: center;
+  border-radius: 20px;
+  margin: 32px 0 40px;
+  overflow: hidden;
+}
+
+.prostory-hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0) 30%, rgba(15, 23, 42, 0.85) 100%);
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 32px;
+}
+
+.prostory-hero-overlay .prostory-badge {
+  color: var(--prostory-gold-light);
+}
+
+.prostory-hero-title {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(26px, 4vw, 40px);
+  color: #fff;
+  margin: 0 0 8px;
+  line-height: 1.15;
+}
+
+.prostory-hero-meta {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.prostory-header-plain {
+  padding: 48px 0 24px;
+  text-align: center;
+}
+
+.prostory-header-plain h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(26px, 4vw, 38px);
+  margin: 0 0 10px;
+}
+
+.prostory-header-plain .prostory-hero-meta {
+  color: var(--prostory-mist);
+}
+
+.prostory-content {
+  font-size: 17px;
+  line-height: 1.75;
+  color: var(--prostory-slate);
+}
+
+.prostory-content p {
+  margin: 0 0 22px;
+}
+
+.prostory-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 14px;
+}
+
+.prostory-single-footer {
+  margin-top: 48px;
+  padding-top: 24px;
+  border-top: 1px solid var(--prostory-border);
+}
+
+.prostory-back-link {
+  color: var(--prostory-ink);
+  font-weight: 700;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.prostory-back-link:hover {
+  color: var(--prostory-gold);
+}
+
+/* ---------- Galerie des réalisations ---------- */
+
+.prostory-archive {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 20px 80px;
+}
+
+.prostory-archive-header {
+  text-align: center;
+  padding: 56px 0 40px;
+}
+
+.prostory-archive-header h1 {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(30px, 4.5vw, 44px);
+  color: var(--prostory-ink);
+  margin: 0;
+}
+
+.prostory-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 28px;
+}
+
+.prostory-card {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  background: #fff;
+  border-radius: 18px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  transition: transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+.prostory-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.12);
+}
+
+.prostory-card-media {
+  height: 220px;
+  background-size: cover;
+  background-position: center;
+  background-color: var(--prostory-ink);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.prostory-card-placeholder {
+  font-size: 34px;
+  opacity: 0.6;
+}
+
+.prostory-card-body {
+  padding: 20px 22px 24px;
+}
+
+.prostory-card-date {
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--prostory-gold);
+  margin-bottom: 8px;
+}
+
+.prostory-card-title {
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 19px;
+  margin: 0 0 8px;
+  color: var(--prostory-ink);
+  line-height: 1.3;
+}
+
+.prostory-card-excerpt {
+  font-size: 14px;
+  color: var(--prostory-mist);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.prostory-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  color: var(--prostory-mist);
+  padding: 60px 0;
+}
+
+.prostory-archive .pagination {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 48px;
+}
+
+.prostory-archive .page-numbers {
+  padding: 8px 14px;
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid var(--prostory-border);
+  color: var(--prostory-ink);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.prostory-archive .page-numbers.current,
+.prostory-archive .page-numbers:hover {
+  background: var(--prostory-ink);
+  color: #fff;
+  border-color: var(--prostory-ink);
+}
+
+@media (max-width: 600px) {
+  .prostory-hero {
+    border-radius: 0;
+    margin-left: -20px;
+    margin-right: -20px;
+    width: calc(100% + 40px);
+  }
+}

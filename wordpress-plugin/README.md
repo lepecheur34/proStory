@@ -7,6 +7,14 @@ ProStory (voir le reste de ce dépôt) et les publie automatiquement en
 (`realisation-page`) utilisée jusqu'ici. Chaque réalisation devient une vraie
 page indexable, avec une URL propre sur le site de l'artisan.
 
+Toutes les réalisations sont publiées dans un Custom Post Type dédié
+("Réalisations") et rangées dans une unique catégorie WordPress
+"Réalisations". Le plugin fournit aussi sa **propre mise en page premium**
+(fiche réalisation en pleine largeur avec photo d'en-tête, et galerie qui les
+liste toutes en grille) via ses propres gabarits et sa propre feuille de
+style (`templates/`, `assets/prostory-style.css`) — inutile de toucher au
+thème du site pour que ce soit soigné.
+
 ## Installation sur un site WordPress
 
 1. Compresse le dossier `prostory-connector/` en `.zip` (le zip doit
@@ -16,8 +24,8 @@ page indexable, avec une URL propre sur le site de l'artisan.
 2. Sur le site WordPress : **Extensions > Ajouter > Téléverser une
    extension**, sélectionne le zip, installe, puis **Activer**.
 3. Va dans **Réglages > ProStory** : tu y trouveras l'**URL du site** et la
-   **clé API** générée automatiquement — c'est ce qu'il faudra renseigner
-   côté appli ProStory (à venir : écran "Compte > Site web").
+   **clé API** générée automatiquement — à renseigner côté appli ProStory,
+   dans l'écran **Compte > Site WordPress**.
 
 ## Contrat de l'API REST exposée
 
@@ -31,7 +39,6 @@ Paramètres :
   content           (requis)  Corps de l'article (HTML basique autorisé)
   meta_description  (optionnel) Description SEO (Yoast/RankMath si présents)
   image_url         (optionnel) URL publique de la photo à mettre en image à la une
-  metier            (optionnel) Nom du métier, utilisé comme catégorie WordPress
 
 Réponse (200) :
   { "id": 123, "url": "https://<site-wordpress>/mon-article/" }
@@ -49,27 +56,25 @@ curl -X POST "https://www.euroconform.eu/wp-json/prostory/v1/realisations" \
   -H "Authorization: Bearer <colle-la-clé-API-ici>" \
   -d "title=Test ProStory" \
   -d "content=Ceci est un test de publication automatique." \
-  -d "meta_description=Réalisation de test" \
-  -d "metier=Électricien"
+  -d "meta_description=Réalisation de test"
 ```
 
 Si tout fonctionne, la réponse contient l'URL du nouvel article publié.
 
-## Ce qu'il reste à faire côté appli ProStory
+## Mise en page premium
 
-- Nouvel écran/champ dans **Compte** pour saisir l'URL du site + la clé API
-  de l'artisan (même schéma que la connexion Google/Facebook déjà en
-  place : stocké dans `social_connections`, ou une nouvelle table dédiée
-  `wordpress_connections`).
-- Appeler cette API REST au moment de `addRealisation()` (dans
-  `AppContext.js` côté appli), en passant le texte généré (`facebook` ou
-  `linkedin`, au choix) comme corps d'article, et la première photo
-  publique comme `image_url`.
-- Utiliser l'URL WordPress retournée comme `pageUrl` dans
-  `shareService.js`, à la place de (ou en complément de) la page Supabase
-  actuelle, pour le partage vers Facebook/Instagram/LinkedIn.
-- Prévoir un repli propre si l'artisan n'a pas connecté de site WordPress
-  (garder la page Supabase actuelle comme solution par défaut).
+Le plugin sert lui-même deux gabarits, sans dépendre du thème actif :
+
+- `templates/single-realisation.php` : fiche réalisation (photo en en-tête
+  pleine largeur, contenu, lien retour vers la galerie).
+- `templates/archive-realisations.php` : galerie en grille de toutes les
+  réalisations (utilisée à la fois pour l'archive du Custom Post Type et pour
+  la page de la catégorie "Réalisations").
+
+Ils sont injectés via le filtre `template_include` et stylés par
+`assets/prostory-style.css` (chargée uniquement sur ces deux pages). Pour
+personnaliser le rendu, il suffit de modifier ces fichiers directement dans
+le plugin.
 
 ## Sécurité
 

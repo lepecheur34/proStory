@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: ProStory Connector
- * Description: Reçoit les réalisations créées depuis l'appli mobile ProStory et les publie automatiquement dans un type de contenu dédié "Réalisations" (image à la une et méta-description SEO).
- * Version: 1.2.0
+ * Description: Reçoit les réalisations créées depuis l'appli mobile ProStory et les publie automatiquement dans un type de contenu dédié "Réalisations", avec une mise en page premium (fiche + galerie) fournie par le plugin lui-même, quel que soit le thème du site.
+ * Version: 1.3.0
  * Author: ProStory
  * Text Domain: prostory-connector
  */
@@ -11,8 +11,12 @@ if (!defined('ABSPATH')) {
     exit; // Accès direct au fichier interdit.
 }
 
+define('PROSTORY_VERSION', '1.3.0');
 define('PROSTORY_OPTION_API_KEY', 'prostory_api_key');
 define('PROSTORY_POST_TYPE', 'prostory_realisation');
+define('PROSTORY_CATEGORY_SLUG', 'realisations');
+define('PROSTORY_PLUGIN_DIR', plugin_dir_path(__FILE__));
+define('PROSTORY_PLUGIN_URL', plugin_dir_url(__FILE__));
 
 // ============================================================
 // Custom Post Type "Réalisation" : les réalisations envoyées par l'appli
@@ -43,6 +47,67 @@ function prostory_register_post_type() {
     ));
 }
 add_action('init', 'prostory_register_post_type');
+
+// Les réalisations sont rattachées à la catégorie "Réalisations", qui reste
+// une catégorie WordPress classique (taxonomie "category") : par défaut,
+// WordPress ne montre que le type "post" sur une page de catégorie. On
+// ajoute donc explicitement notre Custom Post Type à la requête principale
+// de cette page-là pour que les réalisations y apparaissent bien.
+function prostory_include_cpt_in_category_archive($query) {
+    if (is_admin() || !$query->is_main_query() || !$query->is_category(PROSTORY_CATEGORY_SLUG)) {
+        return;
+    }
+    $post_types = $query->get('post_type');
+    if (empty($post_types)) {
+        $post_types = array('post');
+    } elseif (!is_array($post_types)) {
+        $post_types = array($post_types);
+    }
+    if (!in_array(PROSTORY_POST_TYPE, $post_types, true)) {
+        $post_types[] = PROSTORY_POST_TYPE;
+        $query->set('post_type', $post_types);
+    }
+}
+add_action('pre_get_posts', 'prostory_include_cpt_in_category_archive');
+
+// ============================================================
+// Mise en page premium (fiche + galerie) : le plugin fournit ses propres
+// gabarits et sa propre feuille de style pour la fiche réalisation et la
+// page qui les liste toutes, afin d'avoir un rendu soigné et cohérent quel
+// que soit le thème installé sur le site — pas besoin d'y toucher.
+// ============================================================
+function prostory_is_realisations_listing() {
+    return is_post_type_archive(PROSTORY_POST_TYPE) || is_category(PROSTORY_CATEGORY_SLUG);
+}
+
+function prostory_enqueue_styles() {
+    if (is_singular(PROSTORY_POST_TYPE) || prostory_is_realisations_listing()) {
+        wp_enqueue_style(
+            'prostory-connector',
+            PROSTORY_PLUGIN_URL . 'assets/prostory-style.css',
+            array(),
+            PROSTORY_VERSION
+        );
+    }
+}
+add_action('wp_enqueue_scripts', 'prostory_enqueue_styles');
+
+function prostory_template_include($template) {
+    if (is_singular(PROSTORY_POST_TYPE)) {
+        $custom = PROSTORY_PLUGIN_DIR . 'templates/single-realisation.php';
+        if (file_exists($custom)) {
+            return $custom;
+        }
+    }
+    if (prostory_is_realisations_listing()) {
+        $custom = PROSTORY_PLUGIN_DIR . 'templates/archive-realisations.php';
+        if (file_exists($custom)) {
+            return $custom;
+        }
+    }
+    return $template;
+}
+add_filter('template_include', 'prostory_template_include');
 
 // ============================================================
 // Activation : génère une clé API à l'installation si absente, et force
