@@ -73,9 +73,24 @@ create table if not exists public.social_connections (
   user_id uuid references auth.users(id) on delete cascade not null,
   provider text not null check (provider in ('google', 'facebook', 'linkedin')),
   account_label text,
+  review_link text,
+  facebook_page_id text,
+  facebook_page_name text,
+  facebook_page_access_token text,
+  instagram_business_id text,
+  instagram_username text,
   connected_at timestamptz default now(),
   unique (user_id, provider)
 );
+
+-- Si la table existait déjà avant ces ajouts, ces lignes ajoutent les
+-- colonnes sans tout recréer (sans effet si déjà présentes).
+alter table public.social_connections add column if not exists review_link text;
+alter table public.social_connections add column if not exists facebook_page_id text;
+alter table public.social_connections add column if not exists facebook_page_name text;
+alter table public.social_connections add column if not exists facebook_page_access_token text;
+alter table public.social_connections add column if not exists instagram_business_id text;
+alter table public.social_connections add column if not exists instagram_username text;
 
 alter table public.social_connections enable row level security;
 

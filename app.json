@@ -2,16 +2,14 @@
   "expo": {
     "name": "ProStory",
     "slug": "prostory",
+    "scheme": "prostory",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
     "icon": "./assets/images/icon.png",
-    "splash": {
-      "image": "./assets/images/splash-icon.png",
-      "backgroundColor": "#1E293B",
-      "resizeMode": "contain"
-    },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": false,
       "infoPlist": {
@@ -21,7 +19,10 @@
     },
     "android": {
       "package": "com.prostory.mvp",
-      "permissions": ["CAMERA", "READ_EXTERNAL_STORAGE"],
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#1E293B"
@@ -29,6 +30,19 @@
     },
     "web": {
       "favicon": "./assets/images/favicon.png"
-    }
+    },
+    "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "backgroundColor": "#1E293B",
+          "imageWidth": 200
+        }
+      ],
+      "expo-mail-composer",
+      "expo-status-bar",
+      "expo-web-browser"
+    ]
   }
 }

@@ -6,7 +6,6 @@ import {
   ScrollView,
   StyleSheet,
   TouchableOpacity,
-  Share,
   Alert,
   ActivityIndicator,
   Dimensions,
@@ -14,9 +13,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { getMetier } from "../data/metiers";
 import { useApp } from "../context/AppContext";
+import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../context/ProfileContext";
 import { generateContent } from "../services/aiService";
 import { sendReviewEmailWithFallback } from "../services/emailService";
+import { fetchReviewLink, withReviewLink } from "../services/socialAuthService";
+import { shareRealisation } from "../services/shareService";
 
 const SCREEN_WIDTH = Dimensions.get("window").width;
 const GOLD = "#B8935A";
@@ -29,6 +31,11 @@ const CHANNEL_META = {
 };
 const ALL_CHANNEL_IDS = ["emailAvis", "facebook", "instagram", "linkedin"];
 
+function getSendButtonLabel(channelId, isSent) {
+  if (channelId === "emailAvis") return isSent ? "Renvoyer l'email" : "Envoyer l'email";
+  return isSent ? "Repartager" : "Partager";
+}
+
 function formatDate(iso) {
   const d = new Date(iso);
   const date = d.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
@@ -39,6 +46,7 @@ function formatDate(iso) {
 export default function RealisationDetailScreen({ route }) {
   const { realisationId } = route.params;
   const { realisations, markChannelSent, addChannelToRealisation } = useApp();
+  const { user } = useAuth();
   const { profile } = useProfile();
   const realisation = realisations.find((r) => r.id === realisationId);
   const [sendingChannel, setSendingChannel] = useState(null);
@@ -80,12 +88,16 @@ export default function RealisationDetailScreen({ route }) {
         } else if (result.method === "manual") {
           await markChannelSent(realisation.id, channelId);
         }
-      } else {
-        const content = realisation[channelId];
-        const result = await Share.share({ message: content });
-        if (result.action === Share.sharedAction) {
-          await markChannelSent(realisation.id, channelId);
-        }
+        return;
+      }
+
+      const shared = await shareRealisation({
+        realisationId: realisation.id,
+        channel: channelId,
+        content: realisation[channelId],
+      });
+      if (shared) {
+        await markChannelSent(realisation.id, channelId);
       }
     } catch (e) {
       Alert.alert("Erreur", e.message || "Impossible d'envoyer pour l'instant.");
@@ -105,10 +117,14 @@ export default function RealisationDetailScreen({ route }) {
         profile,
         description: realisation.description,
       });
-      const patch =
-        channelId === "emailAvis"
-          ? { email_objet: content.emailAvis.objet, email_corps: content.emailAvis.corps }
-          : { [channelId]: content[channelId] };
+      let patch;
+      if (channelId === "emailAvis") {
+        const reviewLink = user ? await fetchReviewLink(user.id).catch(() => null) : null;
+        const emailAvis = withReviewLink(content.emailAvis, reviewLink);
+        patch = { email_objet: emailAvis.objet, email_corps: emailAvis.corps };
+      } else {
+        patch = { [channelId]: content[channelId] };
+      }
       await addChannelToRealisation(realisation.id, patch);
     } catch (e) {
       Alert.alert("Erreur", e.message || "Impossible de générer ce canal pour l'instant.");
@@ -193,7 +209,7 @@ export default function RealisationDetailScreen({ route }) {
                   <ActivityIndicator color={isSent ? "#0F172A" : "white"} size="small" />
                 ) : (
                   <Text style={[styles.sendButtonText, isSent && styles.sendButtonTextSecondary]}>
-                    {isSent ? "Renvoyer" : channelId === "emailAvis" ? "Envoyer l'email" : "Partager"}
+                    {getSendButtonLabel(channelId, isSent)}
                   </Text>
                 )}
               </TouchableOpacity>

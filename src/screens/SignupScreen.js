@@ -17,6 +17,7 @@ export default function SignupScreen({ navigation }) {
   const { signUp } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleSignup = async () => {
@@ -53,13 +54,22 @@ export default function SignupScreen({ navigation }) {
             value={email}
             onChangeText={setEmail}
           />
-          <TextInput
-            style={styles.input}
-            placeholder="Mot de passe (6 caractères min.)"
-            secureTextEntry
-            value={password}
-            onChangeText={setPassword}
-          />
+          <View style={styles.passwordWrapper}>
+            <TextInput
+              style={styles.passwordInput}
+              placeholder="Mot de passe (6 caractères min.)"
+              secureTextEntry={!showPassword}
+              value={password}
+              onChangeText={setPassword}
+            />
+            <TouchableOpacity
+              style={styles.eyeButton}
+              onPress={() => setShowPassword((v) => !v)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Text style={styles.eyeIcon}>{showPassword ? "🙈" : "👁"}</Text>
+            </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             style={[styles.button, (!email || !password || loading) && styles.disabled]}
@@ -93,6 +103,25 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 15,
     marginBottom: 12,
+  },
+  passwordWrapper: {
+    justifyContent: "center",
+    marginBottom: 12,
+  },
+  passwordInput: {
+    backgroundColor: "white",
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    paddingRight: 44,
+    fontSize: 15,
+  },
+  eyeButton: {
+    position: "absolute",
+    right: 12,
+  },
+  eyeIcon: {
+    fontSize: 18,
   },
   button: {
     backgroundColor: "#16A34A",

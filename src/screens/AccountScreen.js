@@ -1,7 +1,8 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   StyleSheet,
   ScrollView,
@@ -18,8 +19,175 @@ import {
   connectProvider,
   disconnectProvider,
   saveConnection,
+  saveReviewLink,
   fetchConnections,
 } from "../services/socialAuthService";
+import { fetchFacebookPages, saveFacebookPage, disconnectFacebookPage } from "../services/facebookService";
+
+// Carte unique pour Google : contrairement à Facebook/LinkedIn, ce qui compte
+// ici n'est pas une identité OAuth mais le lien d'avis. L'état "connecté"
+// reflète donc directement la présence de ce lien.
+function GoogleReviewCard({ provider, connection, userId, onSaved }) {
+  const [value, setValue] = useState(connection?.review_link || "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    setValue(connection?.review_link || "");
+  }, [connection?.review_link]);
+
+  const hasLink = Boolean(connection?.review_link);
+  const dirty = value.trim() !== (connection?.review_link || "");
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await saveReviewLink(userId, "google", value.trim());
+      await onSaved();
+    } catch (e) {
+      Alert.alert("Impossible d'enregistrer", e.message || "Réessaie plus tard.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <View style={styles.googleCard}>
+      <View style={styles.googleCardHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.rowLabel}>{provider.label}</Text>
+          <Text style={styles.rowNote}>{provider.note}</Text>
+        </View>
+        <View style={[styles.statusPill, hasLink ? styles.statusPillConnected : styles.statusPillDefault]}>
+          <Text style={hasLink ? styles.statusPillTextConnected : styles.statusPillText}>
+            {hasLink ? "✅ Connecté" : "Non connecté"}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.googleCardDivider} />
+
+      <Text style={styles.reviewLinkLabel}>🔗 Lien pour recevoir des avis</Text>
+      <Text style={styles.reviewLinkHint}>
+        Va sur ta fiche Google Business Profile → "Demander des avis" → copie le lien, et colle-le
+        ici. C'est ce lien qui sera inséré dans l'email envoyé à tes clients.
+      </Text>
+      <TextInput
+        style={styles.reviewLinkInput}
+        placeholder="https://g.page/r/..."
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="url"
+        value={value}
+        onChangeText={setValue}
+      />
+      <TouchableOpacity
+        style={[styles.reviewLinkSaveButton, (!dirty || saving) && styles.disabled]}
+        onPress={handleSave}
+        disabled={!dirty || saving}
+      >
+        {saving ? (
+          <ActivityIndicator color="white" size="small" />
+        ) : (
+          <Text style={styles.reviewLinkSaveButtonText}>{hasLink ? "Mettre à jour" : "Enregistrer"}</Text>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+}
+
+// Carte unique pour Facebook : ce qui compte n'est pas juste une identité
+// OAuth mais une Page précise (+ son compte Instagram lié le cas échéant),
+// avec son token de publication. L'état "connecté" reflète la présence
+// d'une Page enregistrée.
+function FacebookPageCard({ connection, userId, onSaved }) {
+  const [connecting, setConnecting] = useState(false);
+  const isConnected = Boolean(connection?.facebook_page_id);
+
+  const finalizePageChoice = async (page) => {
+    try {
+      await saveFacebookPage(userId, page);
+      await onSaved();
+    } catch (e) {
+      Alert.alert("Impossible d'enregistrer", e.message || "Réessaie plus tard.");
+    }
+  };
+
+  const handleConnect = async () => {
+    setConnecting(true);
+    try {
+      const pages = await fetchFacebookPages();
+      if (pages.length === 1) {
+        await finalizePageChoice(pages[0]);
+        return;
+      }
+      Alert.alert("Choisis ta Page", "Plusieurs Pages Facebook sont liées à ton compte.", [
+        ...pages.map((page) => ({ text: page.name, onPress: () => finalizePageChoice(page) })),
+        { text: "Annuler", style: "cancel" },
+      ]);
+    } catch (e) {
+      Alert.alert("Connexion impossible", e.message || "Réessaie plus tard.");
+    } finally {
+      setConnecting(false);
+    }
+  };
+
+  const handleDisconnect = () => {
+    Alert.alert("Déconnecter cette Page ?", "Tu pourras en reconnecter une (la même ou une autre) à tout moment.", [
+      { text: "Annuler", style: "cancel" },
+      {
+        text: "Déconnecter",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await disconnectFacebookPage(userId);
+            await onSaved();
+          } catch (e) {
+            Alert.alert("Impossible", e.message || "Réessaie plus tard.");
+          }
+        },
+      },
+    ]);
+  };
+
+  return (
+    <View style={styles.googleCard}>
+      <View style={styles.googleCardHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.rowLabel}>Facebook (page pro)</Text>
+          <Text style={styles.rowNote}>
+            {isConnected
+              ? `Page identifiée : "${connection.facebook_page_name}"${
+                  connection.instagram_username ? ` (+ Instagram @${connection.instagram_username})` : ""
+                }. La publication automatique n'est pas encore activée (Meta demande une validation
+              supplémentaire) — partage les posts toi-même depuis "Mes réalisations" en un tap.`
+              : "Identifie ta Page pro (préparation pour une future publication automatique). En attendant, partage les posts toi-même depuis \"Mes réalisations\"."}
+          </Text>
+        </View>
+        <View style={[styles.statusPill, isConnected ? styles.statusPillConnected : styles.statusPillDefault]}>
+          <Text style={isConnected ? styles.statusPillTextConnected : styles.statusPillText}>
+            {isConnected ? "✅ Connecté" : "Non connecté"}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.googleCardDivider} />
+
+      <TouchableOpacity
+        style={[styles.reviewLinkSaveButton, connecting && styles.disabled]}
+        onPress={isConnected ? handleDisconnect : handleConnect}
+        disabled={connecting}
+      >
+        {connecting ? (
+          <ActivityIndicator color="white" size="small" />
+        ) : (
+          <Text style={styles.reviewLinkSaveButtonText}>
+            {isConnected ? "Déconnecter / changer de page" : "Connecter ma page Facebook"}
+          </Text>
+        )}
+      </TouchableOpacity>
+    </View>
+  );
+}
 
 function ProviderRow({ providerKey, provider, connection, onToggle, busy }) {
   const isConnected = Boolean(connection);
@@ -135,16 +303,27 @@ export default function AccountScreen({ navigation }) {
         {loadingList ? (
           <ActivityIndicator style={{ marginTop: 16 }} />
         ) : (
-          Object.entries(SOCIAL_PROVIDERS).map(([key, provider]) => (
-            <ProviderRow
-              key={key}
-              providerKey={key}
-              provider={provider}
-              connection={getConnection(key)}
-              onToggle={handleToggle}
-              busy={busyProvider === key}
+          <>
+            <GoogleReviewCard
+              provider={SOCIAL_PROVIDERS.google}
+              connection={getConnection("google")}
+              userId={user.id}
+              onSaved={loadConnections}
             />
-          ))
+            <FacebookPageCard connection={getConnection("facebook")} userId={user.id} onSaved={loadConnections} />
+            {Object.entries(SOCIAL_PROVIDERS)
+              .filter(([key]) => key !== "google" && key !== "facebook")
+              .map(([key, provider]) => (
+                <ProviderRow
+                  key={key}
+                  providerKey={key}
+                  provider={provider}
+                  connection={getConnection(key)}
+                  onToggle={handleToggle}
+                  busy={busyProvider === key}
+                />
+              ))}
+          </>
         )}
 
         <TouchableOpacity style={styles.signOutButton} onPress={handleSignOut}>
@@ -195,4 +374,39 @@ const styles = StyleSheet.create({
   rowButtonTextConnected: { color: "#166534", fontWeight: "700", fontSize: 12.5 },
   signOutButton: { marginTop: 28, alignItems: "center", paddingVertical: 12 },
   signOutText: { color: "#DC2626", fontWeight: "700", fontSize: 14 },
+  googleCard: {
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  googleCardHeader: { flexDirection: "row", alignItems: "center", gap: 12 },
+  googleCardDivider: { height: 1, backgroundColor: "#E2E8F0", marginVertical: 14 },
+  statusPill: { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, minWidth: 96, alignItems: "center" },
+  statusPillDefault: { backgroundColor: "#F1F5F9" },
+  statusPillConnected: { backgroundColor: "#DCFCE7" },
+  statusPillText: { color: "#64748B", fontWeight: "700", fontSize: 12.5 },
+  statusPillTextConnected: { color: "#166534", fontWeight: "700", fontSize: 12.5 },
+  reviewLinkLabel: { fontWeight: "700", color: "#1E293B", fontSize: 13.5 },
+  reviewLinkHint: { fontSize: 11.5, color: "#94A3B8", marginTop: 4, marginBottom: 10, lineHeight: 16 },
+  reviewLinkInput: {
+    backgroundColor: "#F8FAFC",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 13.5,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    marginBottom: 10,
+  },
+  reviewLinkSaveButton: {
+    backgroundColor: "#0F172A",
+    borderRadius: 8,
+    paddingVertical: 10,
+    alignItems: "center",
+  },
+  reviewLinkSaveButtonText: { color: "white", fontWeight: "700", fontSize: 12.5 },
+  disabled: { opacity: 0.4 },
 });

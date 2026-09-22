@@ -16,6 +16,7 @@ import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../context/ProfileContext";
 import { fetchConnections } from "../services/socialAuthService";
 import { sendReviewEmailWithFallback } from "../services/emailService";
+import { shareRealisation } from "../services/shareService";
 
 function PlatformBlock({ icon, title, value, onChange }) {
   return (
@@ -27,10 +28,6 @@ function PlatformBlock({ icon, title, value, onChange }) {
     </View>
   );
 }
-
-// Associe chaque identifiant de canal choisi à l'écran à son provider
-// social (pour vérifier la connexion) — non listé pour l'email, pas concerné.
-const SOCIAL_BY_CHANNEL = { facebook: "facebook", instagram: "facebook", linkedin: "linkedin" };
 
 export default function ResultScreen({ route, navigation }) {
   const { metierId, email, content, channels = [], description } = route.params;
@@ -47,6 +44,13 @@ export default function ResultScreen({ route, navigation }) {
   const [saved, setSaved] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [connections, setConnections] = useState([]);
+  const [savedRealisation, setSavedRealisation] = useState(null);
+  const [sharingChannel, setSharingChannel] = useState(null);
+
+  const showFacebook = channels.includes("facebook");
+  const showInstagram = channels.includes("instagram");
+  const showLinkedin = channels.includes("linkedin");
+  const showEmail = channels.includes("emailAvis");
 
   useEffect(() => {
     if (!user) return;
@@ -55,34 +59,7 @@ export default function ResultScreen({ route, navigation }) {
       .catch(() => setConnections([]));
   }, [user]);
 
-  const showFacebook = channels.includes("facebook");
-  const showInstagram = channels.includes("instagram");
-  const showLinkedin = channels.includes("linkedin");
-  const showEmail = channels.includes("emailAvis");
-
-  const missingConnections = () => {
-    const socialChannelsUsed = channels.filter((c) => SOCIAL_BY_CHANNEL[c]);
-    const providersNeeded = [...new Set(socialChannelsUsed.map((c) => SOCIAL_BY_CHANNEL[c]))];
-    return providersNeeded.filter((p) => !connections.some((c) => c.provider === p));
-  };
-
-  const handleValidate = async () => {
-    const missing = missingConnections();
-    if (missing.length > 0) {
-      const labels = missing.map((p) => (p === "facebook" ? "Facebook/Instagram" : "LinkedIn")).join(" et ");
-      Alert.alert(
-        "Compte non connecté",
-        `Tu as choisi de publier sur ${labels}, mais ce compte n'est pas encore connecté. Va dans Compte pour le connecter, ou décoche ce canal pour cette fois.`,
-        [
-          { text: "Décocher et continuer", onPress: () => saveRealisation() },
-          { text: "Aller dans Compte", onPress: () => navigation.navigate("AccountTab") },
-          { text: "Annuler", style: "cancel" },
-        ]
-      );
-      return;
-    }
-    await saveRealisation();
-  };
+  const googleReviewLink = connections.find((c) => c.provider === "google")?.review_link;
 
   const saveRealisation = async () => {
     setPublishing(true);
@@ -98,7 +75,6 @@ export default function ResultScreen({ route, navigation }) {
         emailObjet: showEmail ? emailObjet : null,
         emailCorps: showEmail ? emailCorps : null,
       });
-
       let emailMessage = "";
       if (showEmail && email) {
         try {
@@ -123,15 +99,27 @@ export default function ResultScreen({ route, navigation }) {
       }
 
       setSaved(true);
-      Alert.alert(
-        "Enregistré ✅",
-        `Retrouve cette réalisation dans "Mes réalisations" pour partager sur les réseaux non connectés.${emailMessage}`,
-        [{ text: "OK", onPress: () => navigation.popToTop() }]
-      );
+      setSavedRealisation(savedRealisation);
+      if (emailMessage) Alert.alert("Email avis Google", emailMessage.trim());
     } catch (e) {
       Alert.alert("Erreur", e.message || "Impossible d'enregistrer cette réalisation.");
     } finally {
       setPublishing(false);
+    }
+  };
+
+  const handleShare = async (channelId, text) => {
+    setSharingChannel(channelId);
+    try {
+      const shared = await shareRealisation({ realisationId: savedRealisation.id, channel: channelId, content: text });
+      if (shared) {
+        await markChannelSent(savedRealisation.id, channelId);
+        setSavedRealisation((r) => ({ ...r, sent_channels: [...new Set([...(r.sent_channels || []), channelId])] }));
+      }
+    } catch (e) {
+      Alert.alert("Erreur", e.message || "Impossible de partager pour l'instant.");
+    } finally {
+      setSharingChannel(null);
     }
   };
 
@@ -162,20 +150,72 @@ export default function ResultScreen({ route, navigation }) {
               Cet email partira automatiquement à la validation si l'envoi automatique est configuré (voir
               README), sinon ton appli mail s'ouvrira.
             </Text>
+            {!googleReviewLink && (
+              <View style={styles.reviewLinkWarning}>
+                <Text style={styles.reviewLinkWarningText}>
+                  ⚠️ Aucun lien d'avis Google configuré : ce mail n'inclura pas de lien cliquable pour laisser
+                  un avis.
+                </Text>
+                <TouchableOpacity onPress={() => navigation.navigate("AccountTab")}>
+                  <Text style={styles.reviewLinkWarningLink}>Ajouter mon lien dans Compte</Text>
+                </TouchableOpacity>
+              </View>
+            )}
           </View>
         )}
 
-        <TouchableOpacity style={styles.validateButton} onPress={handleValidate} disabled={saved || publishing}>
-          {publishing ? (
-            <ActivityIndicator color="white" />
-          ) : (
-            <Text style={styles.validateButtonText}>{saved ? "✅ Enregistré" : "✅ Valider et publier"}</Text>
-          )}
-        </TouchableOpacity>
+        {!saved && (
+          <TouchableOpacity style={styles.validateButton} onPress={saveRealisation} disabled={publishing}>
+            {publishing ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Text style={styles.validateButtonText}>✅ Valider et publier</Text>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {saved && (
+          <View style={styles.shareSection}>
+            <Text style={styles.shareTitle}>
+              {showFacebook || showInstagram || showLinkedin ? "✅ Enregistré — partage maintenant" : "✅ Enregistré"}
+            </Text>
+            {[
+              { id: "facebook", icon: "📘", show: showFacebook, value: facebook },
+              { id: "instagram", icon: "📸", show: showInstagram, value: instagram },
+              { id: "linkedin", icon: "💼", show: showLinkedin, value: linkedin },
+            ]
+              .filter((c) => c.show)
+              .map((c) => {
+                const sent = savedRealisation?.sent_channels?.includes(c.id);
+                const isSharing = sharingChannel === c.id;
+                return (
+                  <TouchableOpacity
+                    key={c.id}
+                    style={[styles.shareButton, sent && styles.shareButtonSent]}
+                    onPress={() => handleShare(c.id, c.value)}
+                    disabled={isSharing}
+                  >
+                    {isSharing ? (
+                      <ActivityIndicator color={sent ? "#166534" : "white"} size="small" />
+                    ) : (
+                      <Text style={[styles.shareButtonText, sent && styles.shareButtonTextSent]}>
+                        {c.icon} {sent ? "Repartager" : "Partager"} sur {CHANNEL_LABELS[c.id]}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            <TouchableOpacity style={styles.doneButton} onPress={() => navigation.popToTop()}>
+              <Text style={styles.doneButtonText}>Terminer</Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </ScrollView>
     </SafeAreaView>
   );
 }
+
+const CHANNEL_LABELS = { facebook: "Facebook", instagram: "Instagram", linkedin: "LinkedIn" };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
@@ -215,6 +255,14 @@ const styles = StyleSheet.create({
   },
   emailLabel: { fontSize: 12, fontWeight: "700", color: "#64748B", marginBottom: 4 },
   emailNote: { fontSize: 11, color: "#94A3B8", marginTop: 10, fontStyle: "italic" },
+  reviewLinkWarning: {
+    backgroundColor: "#FEF3C7",
+    borderRadius: 8,
+    padding: 10,
+    marginTop: 10,
+  },
+  reviewLinkWarningText: { color: "#92400E", fontSize: 12 },
+  reviewLinkWarningLink: { color: "#92400E", fontSize: 12, fontWeight: "700", marginTop: 6 },
   validateButton: {
     marginTop: 24,
     backgroundColor: "#16A34A",
@@ -223,4 +271,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   validateButtonText: { color: "white", fontWeight: "700", fontSize: 15 },
+  shareSection: {
+    marginTop: 24,
+    backgroundColor: "white",
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  shareTitle: { fontWeight: "700", fontSize: 15, color: "#166534", marginBottom: 14 },
+  shareButton: {
+    backgroundColor: "#0F172A",
+    borderRadius: 11,
+    paddingVertical: 13,
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  shareButtonSent: { backgroundColor: "#DCFCE7" },
+  shareButtonText: { color: "white", fontWeight: "700", fontSize: 14 },
+  shareButtonTextSent: { color: "#166534" },
+  doneButton: { alignItems: "center", paddingVertical: 12, marginTop: 4 },
+  doneButtonText: { color: "#64748B", fontWeight: "700", fontSize: 13.5 },
 });

@@ -16,8 +16,10 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import * as ImagePicker from "expo-image-picker";
 import { getMetier } from "../data/metiers";
+import { useAuth } from "../context/AuthContext";
 import { useProfile } from "../context/ProfileContext";
 import { generateContent } from "../services/aiService";
+import { fetchReviewLink, withReviewLink } from "../services/socialAuthService";
 
 const MAX_PHOTOS = 3;
 
@@ -31,6 +33,7 @@ const CHANNELS = [
 export default function CaptureScreen({ route, navigation }) {
   const { metierId } = route.params;
   const metier = getMetier(metierId);
+  const { user } = useAuth();
   const { profile } = useProfile();
 
   const [photos, setPhotos] = useState([null, null, null]);
@@ -129,6 +132,12 @@ export default function CaptureScreen({ route, navigation }) {
     try {
       const usedPhotos = photos.filter(Boolean);
       const content = await generateContent({ photos: usedPhotos, metierId, profile, description });
+
+      if (channels.includes("emailAvis") && user) {
+        const reviewLink = await fetchReviewLink(user.id).catch(() => null);
+        content.emailAvis = withReviewLink(content.emailAvis, reviewLink);
+      }
+
       navigation.navigate("Result", {
         metierId,
         email: email.trim(),
