@@ -24,7 +24,7 @@ while (have_posts()) :
         <?php if ($has_thumbnail) : ?>
             <div
                 class="prostory-hero"
-                style="background-image:url('<?php echo esc_url(get_the_post_thumbnail_url(get_the_ID(), 'large')); ?>');"
+                style="background-image:url('<?php echo esc_url(get_the_post_thumbnail_url(get_the_ID(), 'prostory-hero')); ?>');"
             >
                 <div class="prostory-hero-overlay">
                     <span class="prostory-badge">Réalisation</span>
@@ -48,7 +48,7 @@ while (have_posts()) :
             <div class="prostory-carousel" data-prostory-carousel>
                 <div class="prostory-carousel-track">
                     <?php foreach ($gallery_ids as $attachment_id) :
-                        $src = wp_get_attachment_image_url($attachment_id, 'large');
+                        $src = wp_get_attachment_image_url($attachment_id, 'prostory-slide');
                         if (!$src) {
                             continue;
                         }

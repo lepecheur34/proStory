@@ -21,8 +21,8 @@ import { useProfile } from "../context/ProfileContext";
 import { useApp } from "../context/AppContext";
 import { generateGenericContent, generateArticleContent } from "../services/aiService";
 import { fetchConnections, fetchReviewLink, withReviewLink } from "../services/socialAuthService";
-import { createWordPressArticle } from "../services/wordpressService";
 import { sendReviewEmailWithFallback } from "../services/emailService";
+import { optimizePhoto } from "../services/imageService";
 
 const MAX_PHOTOS = 3;
 
@@ -31,11 +31,12 @@ export default function CaptureScreen({ route, navigation }) {
   const metier = getMetier(metierId);
   const { user } = useAuth();
   const { profile } = useProfile();
-  const { addRealisation, markChannelSent, addChannelToRealisation } = useApp();
+  const { addRealisation, markChannelSent } = useApp();
 
   const [photos, setPhotos] = useState([null, null, null]);
   const [description, setDescription] = useState("");
   const [email, setEmail] = useState("");
+  const [visibility, setVisibility] = useState("private");
   const [loading, setLoading] = useState(false);
 
   const photoCount = photos.filter(Boolean).length;
@@ -46,9 +47,9 @@ export default function CaptureScreen({ route, navigation }) {
       Alert.alert("Permission refusée", "L'accès à la caméra est nécessaire pour prendre une photo.");
       return;
     }
-    const result = await ImagePicker.launchCameraAsync({ quality: 0.7, allowsEditing: false });
+    const result = await ImagePicker.launchCameraAsync({ quality: 1, allowsEditing: false });
     if (!result.canceled && result.assets?.length) {
-      setPhotoAt(index, result.assets[0].uri);
+      setPhotoAt(index, await optimizePhoto(result.assets[0]));
     }
   };
 
@@ -58,10 +59,35 @@ export default function CaptureScreen({ route, navigation }) {
       Alert.alert("Permission refusée", "L'accès à la galerie est nécessaire.");
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({ quality: 0.7 });
-    if (!result.canceled && result.assets?.length) {
-      setPhotoAt(index, result.assets[0].uri);
+    // Sur une case déjà remplie, on ne remplace qu'elle (sélection unique).
+    // Sur une case vide, on permet de sélectionner plusieurs photos d'un
+    // coup, qui viennent alors remplir toutes les cases encore vides.
+    const isFilled = Boolean(photos[index]);
+    const remainingSlots = MAX_PHOTOS - photoCount;
+    const result = await ImagePicker.launchImageLibraryAsync({
+      quality: 1,
+      allowsMultipleSelection: !isFilled,
+      selectionLimit: isFilled ? 1 : remainingSlots,
+    });
+    if (result.canceled || !result.assets?.length) return;
+
+    if (isFilled) {
+      setPhotoAt(index, await optimizePhoto(result.assets[0]));
+      return;
     }
+
+    const uris = await Promise.all(result.assets.map(optimizePhoto));
+    setPhotos((prev) => {
+      const next = [...prev];
+      let uriIndex = 0;
+      for (let i = 0; i < next.length && uriIndex < uris.length; i++) {
+        if (!next[i]) {
+          next[i] = uris[uriIndex];
+          uriIndex++;
+        }
+      }
+      return next;
+    });
   };
 
   const setPhotoAt = (index, uri) => {
@@ -80,7 +106,7 @@ export default function CaptureScreen({ route, navigation }) {
   const handleSlotPress = (index) => {
     const isFilled = Boolean(photos[index]);
 
-    const addOptions = ["Prendre une photo", "Choisir dans la galerie", "Annuler"];
+    const addOptions = ["Prendre une photo", "Choisir dans la galerie (plusieurs possible)", "Annuler"];
     const filledOptions = ["Remplacer la photo", "Supprimer la photo", "Annuler"];
     const options = isFilled ? filledOptions : addOptions;
 
@@ -108,7 +134,7 @@ export default function CaptureScreen({ route, navigation }) {
             ]
           : [
               { text: "📷 Prendre une photo", onPress: () => launchCamera(index) },
-              { text: "🖼️ Depuis la galerie", onPress: () => launchLibrary(index) },
+              { text: "🖼️ Depuis la galerie (plusieurs possible)", onPress: () => launchLibrary(index) },
               { text: "Annuler", style: "cancel" },
             ]
       );
@@ -140,6 +166,7 @@ export default function CaptureScreen({ route, navigation }) {
         linkedin: null,
         emailObjet: trimmedEmail ? generic.emailAvis.objet : null,
         emailCorps: trimmedEmail ? generic.emailAvis.corps : null,
+        visibility,
       });
 
       // Email d'avis Google automatique, si un email a été renseigné.
@@ -161,40 +188,44 @@ export default function CaptureScreen({ route, navigation }) {
         }
       }
 
-      // Publication automatique sur le site WordPress connecté, s'il y en a
-      // un : article optimisé SEO (titre, H1, méta-description, contenu)
-      // généré par l'IA à partir de la description. La première photo sert
-      // d'image à la une, les suivantes sont intégrées par le plugin dans un
-      // carousel sur la page.
+      // Si un site WordPress est connecté, on génère l'article optimisé SEO
+      // (titre, H1, méta-description, contenu) à partir de la description,
+      // mais on ne le publie pas tout de suite : on passe d'abord par un
+      // écran d'aperçu où l'artisan peut le relire et le modifier avant
+      // qu'il parte réellement sur son site.
+      let wpConnection = null;
+      let article = null;
       if (user) {
         try {
           const connections = await fetchConnections(user.id);
-          const wpConnection = connections.find(
+          wpConnection = connections.find(
             (c) => c.provider === "wordpress" && c.wordpress_site_url && c.wordpress_api_key
           );
           if (wpConnection) {
-            const article = await generateArticleContent({ metierId, profile, description });
-            const photoUrls = savedRealisation.photo_urls || [];
-            const wpResult = await createWordPressArticle({
-              siteUrl: wpConnection.wordpress_site_url,
-              apiKey: wpConnection.wordpress_api_key,
-              title: article.title,
-              h1: article.h1,
-              content: article.content,
-              metaDescription: article.metaDescription,
-              imageUrl: photoUrls[0] || null,
-              galleryUrls: photoUrls.slice(1),
-            });
-            await addChannelToRealisation(savedRealisation.id, { wordpress_url: wpResult.url });
+            article = await generateArticleContent({ metierId, profile, description });
           }
         } catch (e) {
           // Silencieux : la réalisation reste utilisable sans le site.
+          wpConnection = null;
         }
       }
 
-      // On rebascule directement sur la fiche de cette réalisation (dans
-      // l'onglet "Mes réalisations"), prête pour le partage.
-      navigation.navigate("HistoryTab", { screen: "RealisationDetail", params: { realisationId: savedRealisation.id } });
+      if (wpConnection && article) {
+        navigation.navigate("ArticleReview", {
+          realisationId: savedRealisation.id,
+          article,
+          wpConnection: { siteUrl: wpConnection.wordpress_site_url, apiKey: wpConnection.wordpress_api_key },
+          photoUrls: savedRealisation.photo_urls || [],
+        });
+      } else {
+        // Pas de site connecté (ou génération impossible) : on rebascule
+        // directement sur la fiche de cette réalisation, prête pour le
+        // partage.
+        navigation.navigate("HistoryTab", {
+          screen: "RealisationDetail",
+          params: { realisationId: savedRealisation.id },
+        });
+      }
     } catch (e) {
       Alert.alert("Erreur", e.message || "Impossible de créer cette réalisation.");
     } finally {
@@ -206,9 +237,12 @@ export default function CaptureScreen({ route, navigation }) {
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={{ flex: 1 }}>
         <ScrollView contentContainerStyle={styles.scroll}>
-          <Text style={styles.title}>
-            {metier.emoji} {metier.label}
-          </Text>
+          <Text style={styles.title}>{profile?.nom_entreprise || metier.label}</Text>
+          <View style={styles.metierChip}>
+            <Text style={styles.metierChipText}>
+              {metier.emoji} {metier.label}
+            </Text>
+          </View>
           <Text style={styles.subtitle}>
             Photos de la réalisation (optionnel, jusqu'à {MAX_PHOTOS})
           </Text>
@@ -259,6 +293,38 @@ export default function CaptureScreen({ route, navigation }) {
             réseaux se fera juste après, depuis la fiche de la réalisation.
           </Text>
 
+          <Text style={styles.label}>Visibilité</Text>
+          <View style={styles.visibilityRow}>
+            <TouchableOpacity
+              style={[styles.visibilityOption, visibility === "private" && styles.visibilityOptionActive]}
+              onPress={() => setVisibility("private")}
+            >
+              <Text
+                style={[
+                  styles.visibilityOptionText,
+                  visibility === "private" && styles.visibilityOptionTextActive,
+                ]}
+              >
+                🔒 Privée
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.visibilityOption, visibility === "public" && styles.visibilityOptionActive]}
+              onPress={() => setVisibility("public")}
+            >
+              <Text
+                style={[styles.visibilityOptionText, visibility === "public" && styles.visibilityOptionTextActive]}
+              >
+                🌍 Publique
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.hint}>
+            {visibility === "public"
+              ? "Visible par tous les artisans dans l'onglet Communauté."
+              : "Visible uniquement par toi. Reste publiée sur ton site si tu es connecté à WordPress."}
+          </Text>
+
           <TouchableOpacity
             style={[styles.submitButton, !canSubmit && styles.disabledButton]}
             onPress={handleSubmit}
@@ -280,7 +346,18 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F8FAFC" },
   scroll: { padding: 24, paddingBottom: 48 },
   title: { fontSize: 24, fontWeight: "800", color: "#0F172A" },
-  subtitle: { fontSize: 15, color: "#64748B", marginTop: 4, marginBottom: 20 },
+  metierChip: {
+    alignSelf: "flex-start",
+    backgroundColor: "white",
+    borderRadius: 20,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+    marginTop: 8,
+  },
+  metierChipText: { fontSize: 12, fontWeight: "700", color: "#334155" },
+  subtitle: { fontSize: 15, color: "#64748B", marginTop: 12, marginBottom: 20 },
   photoRow: { flexDirection: "row", justifyContent: "space-between" },
   photoSlot: { width: "31%" },
   photo: { width: "100%", aspectRatio: 1, borderRadius: 12 },
@@ -321,6 +398,19 @@ const styles = StyleSheet.create({
     borderColor: "#E2E8F0",
   },
   textarea: { minHeight: 80, textAlignVertical: "top" },
+  visibilityRow: { flexDirection: "row", gap: 10 },
+  visibilityOption: {
+    flex: 1,
+    backgroundColor: "white",
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: "center",
+    borderWidth: 1.5,
+    borderColor: "#E2E8F0",
+  },
+  visibilityOptionActive: { backgroundColor: "#0F172A", borderColor: "#0F172A" },
+  visibilityOptionText: { fontSize: 14, fontWeight: "700", color: "#334155" },
+  visibilityOptionTextActive: { color: "white" },
   submitButton: {
     marginTop: 28,
     backgroundColor: "#0F172A",

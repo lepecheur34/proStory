@@ -24,7 +24,7 @@ get_header();
             <?php
             while (have_posts()) :
                 the_post();
-                $thumb_url = has_post_thumbnail() ? get_the_post_thumbnail_url(get_the_ID(), 'medium_large') : '';
+                $thumb_url = has_post_thumbnail() ? get_the_post_thumbnail_url(get_the_ID(), 'prostory-card') : '';
                 ?>
                 <a class="prostory-card" href="<?php the_permalink(); ?>">
                     <div

@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import {
   View,
   Text,
+  Image,
   TextInput,
   TouchableOpacity,
   StyleSheet,
@@ -44,6 +45,7 @@ export default function SignupScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
         <View style={styles.content}>
+          <Image source={require("../../assets/images/logo-wide.png")} style={styles.logo} resizeMode="contain" />
           <Text style={styles.title}>Créer un compte</Text>
 
           <TextInput
@@ -95,6 +97,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0F172A" },
   flex: { flex: 1 },
   content: { flex: 1, justifyContent: "center", paddingHorizontal: 28 },
+  logo: { width: 240, height: 51, alignSelf: "center", marginBottom: 12 },
   title: { fontSize: 26, fontWeight: "800", color: "white", marginBottom: 24, textAlign: "center" },
   input: {
     backgroundColor: "white",

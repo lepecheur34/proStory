@@ -51,9 +51,14 @@ export default function HomeScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scroll}>
         <Text style={styles.eyebrow}>{profile?.ville ? profile.ville.toUpperCase() : "PROSTORY"}</Text>
-        <Text style={styles.greeting}>
-          {metier.emoji} {profile?.nom_entreprise || metier.label}
-        </Text>
+        <Text style={styles.greeting}>{profile?.nom_entreprise || metier.label}</Text>
+        <View style={styles.metierChipWrap}>
+          <View style={styles.metierChip}>
+            <Text style={styles.metierChipText}>
+              {metier.emoji} {metier.label}
+            </Text>
+          </View>
+        </View>
         <Text style={styles.subtitle}>Prêt à valoriser ta dernière intervention ?</Text>
 
         <TouchableOpacity
@@ -93,6 +98,16 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   greeting: { fontSize: 25, fontWeight: "800", color: "#0F172A", textAlign: "center" },
+  metierChipWrap: { alignItems: "center", marginTop: 10 },
+  metierChip: {
+    backgroundColor: "white",
+    borderRadius: 20,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: "#E2E8F0",
+  },
+  metierChipText: { fontSize: 12.5, fontWeight: "700", color: "#334155" },
   subtitle: { fontSize: 15, color: "#64748B", textAlign: "center", marginTop: 8, marginBottom: 36 },
   mainButton: {
     backgroundColor: "#0F172A",

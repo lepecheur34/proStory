@@ -113,6 +113,7 @@ export function AppProvider({ children }) {
           email_objet: realisation.emailObjet,
           email_corps: realisation.emailCorps,
           sent_channels: [],
+          visibility: realisation.visibility || "private",
         })
         .select()
         .single();
@@ -134,6 +135,7 @@ export function AppProvider({ children }) {
       client_email: realisation.email,
       photo_urls: realisation.photos || [],
       sent_channels: [],
+      visibility: realisation.visibility || "private",
       ...realisation,
     };
     setRealisations((prev) => {

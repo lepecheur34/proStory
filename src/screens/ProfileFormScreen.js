@@ -12,7 +12,7 @@ import {
   Platform,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { METIERS } from "../data/metiers";
+import { getMetier, searchMetiers } from "../data/metiers";
 import { useProfile } from "../context/ProfileContext";
 
 export default function ProfileFormScreen({ navigation, route }) {
@@ -24,9 +24,11 @@ export default function ProfileFormScreen({ navigation, route }) {
   const [nomEntreprise, setNomEntreprise] = useState(existing?.nom_entreprise || "");
   const [ville, setVille] = useState(existing?.ville || "");
   const [description, setDescription] = useState(existing?.description || "");
+  const [metierQuery, setMetierQuery] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const canSubmit = Boolean(metierId) && !loading;
+  const metierResults = searchMetiers(metierQuery);
+  const canSubmit = Boolean(metierId) && nomEntreprise.trim().length > 0 && !loading;
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -56,29 +58,52 @@ export default function ProfileFormScreen({ navigation, route }) {
               : "Quelques infos pour que l'IA écrive vraiment comme toi."}
           </Text>
 
-          <Text style={styles.label}>Ton métier</Text>
-          <View style={styles.metierGrid}>
-            {METIERS.map((m) => (
-              <TouchableOpacity
-                key={m.id}
-                style={[styles.metierChip, metierId === m.id && styles.metierChipSelected]}
-                onPress={() => setMetierId(m.id)}
-              >
-                <Text style={styles.metierEmoji}>{m.emoji}</Text>
-                <Text style={[styles.metierLabel, metierId === m.id && styles.metierLabelSelected]}>
-                  {m.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
-          <Text style={styles.label}>Nom de ton entreprise (optionnel)</Text>
+          <Text style={styles.label}>Nom de ton entreprise</Text>
           <TextInput
             style={styles.input}
             placeholder="Ex : Garage Dupont"
             value={nomEntreprise}
             onChangeText={setNomEntreprise}
           />
+
+          <Text style={styles.label}>Ton métier</Text>
+          {metierId ? (
+            <Text style={styles.selectedMetier}>
+              Sélectionné : {getMetier(metierId).emoji} {getMetier(metierId).label}
+            </Text>
+          ) : null}
+          <TextInput
+            style={styles.input}
+            placeholder="Rechercher un métier (ex : plombier, développeur, coiffeur...)"
+            value={metierQuery}
+            onChangeText={setMetierQuery}
+            autoCorrect={false}
+          />
+          <ScrollView
+            style={styles.metierList}
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.metierGrid}>
+              {metierResults.map((m) => (
+                <TouchableOpacity
+                  key={m.id}
+                  style={[styles.metierChip, metierId === m.id && styles.metierChipSelected]}
+                  onPress={() => setMetierId(m.id)}
+                >
+                  <Text style={styles.metierEmoji}>{m.emoji}</Text>
+                  <Text style={[styles.metierLabel, metierId === m.id && styles.metierLabelSelected]}>
+                    {m.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {metierResults.length === 0 ? (
+              <Text style={styles.hint}>
+                Aucun métier trouvé. Essaie un autre mot, ou choisis « Autre activité ».
+              </Text>
+            ) : null}
+          </ScrollView>
 
           <Text style={styles.label}>Ville (optionnel)</Text>
           <TextInput style={styles.input} placeholder="Ex : Montpellier" value={ville} onChangeText={setVille} />
@@ -120,6 +145,8 @@ const styles = StyleSheet.create({
   title: { fontSize: 24, fontWeight: "800", color: "#0F172A" },
   subtitle: { fontSize: 14, color: "#64748B", marginTop: 4, marginBottom: 20 },
   label: { fontSize: 14, fontWeight: "700", color: "#334155", marginBottom: 8, marginTop: 18 },
+  selectedMetier: { fontSize: 13.5, fontWeight: "700", color: "#0F172A", marginBottom: 10 },
+  metierList: { maxHeight: 260, marginTop: 10 },
   metierGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
   metierChip: {
     flexDirection: "row",

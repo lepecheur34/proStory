@@ -214,10 +214,20 @@ export default function RealisationDetailScreen({ route, navigation }) {
         )}
 
         <View style={styles.headerCard}>
-          <Text style={styles.eyebrow}>RÉALISATION</Text>
-          <Text style={styles.title}>
-            {metier.emoji} {metier.label}
-          </Text>
+          <View style={styles.headerCardTopRow}>
+            <Text style={styles.eyebrow}>RÉALISATION</Text>
+            <View style={styles.visibilityBadge}>
+              <Text style={styles.visibilityBadgeText}>
+                {realisation.visibility === "public" ? "🌍 Publique" : "🔒 Privée"}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.title}>{profile?.nom_entreprise || metier.label}</Text>
+          <View style={styles.metierChip}>
+            <Text style={styles.metierChipText}>
+              {metier.emoji} {metier.label}
+            </Text>
+          </View>
           <View style={styles.metaRow}>
             <Text style={styles.metaText}>📅 {formatDate(realisation.created_at)}</Text>
           </View>
@@ -339,8 +349,21 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 4,
   },
+  headerCardTopRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
   eyebrow: { fontSize: 10.5, fontWeight: "800", color: GOLD, letterSpacing: 1.5, marginBottom: 6 },
-  title: { fontSize: 21, fontWeight: "800", color: "#0F172A", marginBottom: 12 },
+  visibilityBadge: { backgroundColor: "#F1F5F9", borderRadius: 8, paddingVertical: 3, paddingHorizontal: 9 },
+  visibilityBadgeText: { fontSize: 11, fontWeight: "700", color: "#334155" },
+  title: { fontSize: 21, fontWeight: "800", color: "#0F172A" },
+  metierChip: {
+    alignSelf: "flex-start",
+    backgroundColor: "#F8FAFC",
+    borderRadius: 20,
+    paddingVertical: 4,
+    paddingHorizontal: 11,
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  metierChipText: { fontSize: 11.5, fontWeight: "700", color: "#334155" },
   metaRow: { marginTop: 4 },
   metaText: { fontSize: 13.5, color: "#64748B" },
   noteBox: { marginTop: 12, backgroundColor: "#F8FAFC", borderRadius: 10, padding: 12 },

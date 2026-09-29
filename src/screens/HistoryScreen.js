@@ -51,12 +51,19 @@ export default function HistoryScreen({ navigation }) {
               )}
               <View style={styles.cardBody}>
                 <Text style={styles.cardTitle} numberOfLines={1}>
-                  {metier.emoji} {metier.label}
+                  {item.description || metier.label}
                 </Text>
-                <Text style={styles.cardEmail} numberOfLines={1}>
-                  {item.client_email}
-                </Text>
+                {item.client_email ? (
+                  <Text style={styles.cardEmail} numberOfLines={1}>
+                    {item.client_email}
+                  </Text>
+                ) : null}
                 <View style={styles.cardFooter}>
+                  <View style={styles.cardMetierChip}>
+                    <Text style={styles.cardMetierChipText} numberOfLines={1}>
+                      {metier.emoji} {metier.label}
+                    </Text>
+                  </View>
                   <Text style={styles.cardDate}>{formatShortDate(item.created_at)}</Text>
                   <View style={[styles.statusPill, fullySent && styles.statusPillDone]}>
                     <Text style={[styles.statusPillText, fullySent && styles.statusPillTextDone]}>
@@ -115,6 +122,8 @@ const styles = StyleSheet.create({
   cardTitle: { fontWeight: "700", fontSize: 14.5, color: "#1E293B" },
   cardEmail: { fontSize: 12, color: "#94A3B8", marginTop: 2 },
   cardFooter: { flexDirection: "row", alignItems: "center", marginTop: 8, gap: 8 },
+  cardMetierChip: { backgroundColor: "#F1F5F9", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2, flexShrink: 1 },
+  cardMetierChipText: { fontSize: 10.5, fontWeight: "700", color: "#334155" },
   cardDate: { fontSize: 11, color: "#94A3B8", fontWeight: "600" },
   statusPill: { backgroundColor: "#F1F5F9", borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2 },
   statusPillDone: { backgroundColor: "#DCFCE7" },

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: ProStory Connector
  * Description: Reçoit les réalisations créées depuis l'appli mobile ProStory (articles optimisés SEO générés par IA : titre, H1, méta-description, contenu) et les publie automatiquement dans un type de contenu dédié "Réalisations", avec une mise en page premium (fiche + galerie + carousel photo) fournie par le plugin lui-même, quel que soit le thème du site.
- * Version: 1.4.0
+ * Version: 1.5.0
  * Author: ProStory
  * Text Domain: prostory-connector
  */
@@ -11,7 +11,7 @@ if (!defined('ABSPATH')) {
     exit; // Accès direct au fichier interdit.
 }
 
-define('PROSTORY_VERSION', '1.4.0');
+define('PROSTORY_VERSION', '1.5.0');
 define('PROSTORY_OPTION_API_KEY', 'prostory_api_key');
 define('PROSTORY_POST_TYPE', 'prostory_realisation');
 define('PROSTORY_CATEGORY_SLUG', 'realisations');
@@ -47,6 +47,17 @@ function prostory_register_post_type() {
     ));
 }
 add_action('init', 'prostory_register_post_type');
+
+// Tailles d'image dédiées : bandeau 16:9, vignettes 4:3 et carousel. Elles
+// sont générées à l'import des photos (celles déjà importées gardent leurs
+// anciennes tailles ; un plugin de régénération des miniatures peut les
+// recalculer).
+function prostory_register_image_sizes() {
+    add_image_size('prostory-hero', 1920, 1080, true);
+    add_image_size('prostory-card', 1200, 900, true);
+    add_image_size('prostory-slide', 1600, 1200, true);
+}
+add_action('init', 'prostory_register_image_sizes');
 
 // Les réalisations sont rattachées à la catégorie "Réalisations", qui reste
 // une catégorie WordPress classique (taxonomie "category") : par défaut,
@@ -116,6 +127,35 @@ function prostory_document_title_parts($parts) {
     return $parts;
 }
 add_filter('document_title_parts', 'prostory_document_title_parts');
+
+// Balises Open Graph (photo + titre + description) : c'est ce qui permet à
+// Facebook, LinkedIn, etc. d'afficher un bel aperçu (photo, titre, résumé)
+// quand quelqu'un partage le lien de la réalisation, plutôt qu'un lien nu.
+// Si Yoast ou RankMath est actif, il génère déjà ces balises à partir des
+// mêmes titre/description/image qu'on leur a fournis — on ne les duplique
+// pas pour éviter d'avoir deux jeux de balises og: sur la page.
+function prostory_output_open_graph_tags() {
+    if (!is_singular(PROSTORY_POST_TYPE) || defined('WPSEO_VERSION') || class_exists('RankMath')) {
+        return;
+    }
+
+    $post_id = get_queried_object_id();
+    $title = get_post_meta($post_id, '_prostory_seo_title', true) ?: get_the_title($post_id);
+    $description = get_post_meta($post_id, '_prostory_meta_description', true);
+    $image = get_the_post_thumbnail_url($post_id, 'prostory-hero');
+
+    echo '<meta property="og:type" content="article" />' . "\n";
+    echo '<meta property="og:title" content="' . esc_attr($title) . '" />' . "\n";
+    echo '<meta property="og:url" content="' . esc_url(get_permalink($post_id)) . '" />' . "\n";
+    if ($description) {
+        echo '<meta property="og:description" content="' . esc_attr($description) . '" />' . "\n";
+    }
+    if ($image) {
+        echo '<meta property="og:image" content="' . esc_url($image) . '" />' . "\n";
+        echo '<meta name="twitter:card" content="summary_large_image" />' . "\n";
+    }
+}
+add_action('wp_head', 'prostory_output_open_graph_tags');
 
 function prostory_template_include($template) {
     if (is_singular(PROSTORY_POST_TYPE)) {
@@ -208,9 +248,11 @@ function prostory_render_settings_page() {
                 Régénérer la clé API
             </button>
         </form>
+
     </div>
     <?php
 }
+
 
 // ============================================================
 // API REST : POST /wp-json/prostory/v1/realisations
@@ -273,9 +315,10 @@ function prostory_create_realisation(WP_REST_Request $request) {
     update_post_meta($post_id, 'rank_math_title', $title);
 
     if ($meta_description) {
-        // Compatible avec les champs de méta-description Yoast SEO et
-        // RankMath si l'un de ces plugins est actif sur le site — sans
-        // effet sinon.
+        // Stockage propre au plugin (utilisé par prostory_output_open_graph_tags
+        // ci-dessus), + compatible avec les champs de méta-description Yoast
+        // SEO et RankMath si l'un de ces plugins est actif sur le site.
+        update_post_meta($post_id, '_prostory_meta_description', $meta_description);
         update_post_meta($post_id, '_yoast_wpseo_metadesc', $meta_description);
         update_post_meta($post_id, 'rank_math_description', $meta_description);
     }

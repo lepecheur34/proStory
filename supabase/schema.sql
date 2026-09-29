@@ -45,6 +45,7 @@ create table if not exists public.realisations (
   email_corps text,
   sent_channels text[] default '{}',
   wordpress_url text,
+  visibility text not null default 'private',
   created_at timestamptz default now()
 );
 
@@ -52,6 +53,15 @@ alter table public.realisations add column if not exists wordpress_url text;
 -- L'email client est maintenant optionnel à la création (choix fait après,
 -- au moment du partage) : sans effet si déjà nullable.
 alter table public.realisations alter column client_email drop not null;
+
+-- Visibilité choisie par l'artisan à la création : "private" (par défaut,
+-- visible uniquement par lui) ou "public" (visible par toute la communauté
+-- ProStory dans l'onglet Communauté — voir la vue community_realisations
+-- plus bas). Reste toujours publiée sur son site WordPress dans les deux
+-- cas si connecté : la visibilité ne concerne que le flux communautaire.
+alter table public.realisations add column if not exists visibility text not null default 'private';
+alter table public.realisations drop constraint if exists realisations_visibility_check;
+alter table public.realisations add constraint realisations_visibility_check check (visibility in ('public', 'private'));
 
 alter table public.realisations enable row level security;
 
@@ -70,6 +80,23 @@ create policy "Chacun modifie ses propres réalisations"
 create policy "Chacun supprime ses propres réalisations"
   on public.realisations for delete
   using (auth.uid() = user_id);
+
+
+-- Vue "communauté" : réalisations marquées publiques, colonnes volontairement
+-- limitées au strict nécessaire pour l'affichage (pas d'email client, pas
+-- d'identité ni de ville de l'artisan). Les vues Postgres s'exécutent avec
+-- les droits de leur propriétaire (ici le rôle qui exécute cette migration,
+-- généralement propriétaire de la table) : elle peut donc lire toutes les
+-- réalisations publiques malgré le RLS ci-dessus qui limite chaque artisan
+-- à ses propres lignes sur la table elle-même. Comme la vue n'expose que ces
+-- colonnes, il est impossible de récupérer des données sensibles même en
+-- interrogeant l'API directement avec la clé publique.
+create or replace view public.community_realisations as
+  select id, metier_id, description, photo_urls, created_at
+  from public.realisations
+  where visibility = 'public';
+
+grant select on public.community_realisations to authenticated;
 
 
 -- Table de suivi des connexions réseaux sociaux (statut affiché dans

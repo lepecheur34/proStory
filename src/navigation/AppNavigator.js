@@ -14,14 +14,17 @@ import ForgotPasswordScreen from "../screens/ForgotPasswordScreen";
 import ProfileFormScreen from "../screens/ProfileFormScreen";
 import HomeScreen from "../screens/HomeScreen";
 import CaptureScreen from "../screens/CaptureScreen";
+import ArticleReviewScreen from "../screens/ArticleReviewScreen";
 import HistoryScreen from "../screens/HistoryScreen";
 import RealisationDetailScreen from "../screens/RealisationDetailScreen";
+import CommunityScreen from "../screens/CommunityScreen";
 import AccountScreen from "../screens/AccountScreen";
 
 const AuthStack = createNativeStackNavigator();
 const HomeStack = createNativeStackNavigator();
 const AccountStack = createNativeStackNavigator();
 const HistoryStack = createNativeStackNavigator();
+const CommunityStack = createNativeStackNavigator();
 const Tabs = createBottomTabNavigator();
 
 const headerOptions = {
@@ -45,6 +48,11 @@ function HomeStackNavigator() {
     <HomeStack.Navigator screenOptions={headerOptions}>
       <HomeStack.Screen name="Home" component={HomeScreen} options={{ title: "ProStory" }} />
       <HomeStack.Screen name="Capture" component={CaptureScreen} options={{ title: "Nouvelle réalisation" }} />
+      <HomeStack.Screen
+        name="ArticleReview"
+        component={ArticleReviewScreen}
+        options={{ title: "Aperçu de l'article" }}
+      />
     </HomeStack.Navigator>
   );
 }
@@ -75,6 +83,14 @@ function HistoryStackNavigator() {
   );
 }
 
+function CommunityStackNavigator() {
+  return (
+    <CommunityStack.Navigator screenOptions={headerOptions}>
+      <CommunityStack.Screen name="Community" component={CommunityScreen} options={{ title: "Communauté" }} />
+    </CommunityStack.Navigator>
+  );
+}
+
 function MainTabs() {
   return (
     <Tabs.Navigator screenOptions={{ ...headerOptions, headerShown: false }}>
@@ -87,6 +103,11 @@ function MainTabs() {
         name="HistoryTab"
         component={HistoryStackNavigator}
         options={{ title: "Mes réalisations", tabBarIcon: () => <Text>📋</Text> }}
+      />
+      <Tabs.Screen
+        name="CommunityTab"
+        component={CommunityStackNavigator}
+        options={{ title: "Communauté", tabBarIcon: () => <Text>🌍</Text> }}
       />
       <Tabs.Screen
         name="AccountTab"

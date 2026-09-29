@@ -11,6 +11,7 @@
       "**/*"
     ],
     "ios": {
+      "bundleIdentifier": "com.prostory.mvp",
       "supportsTablet": false,
       "infoPlist": {
         "NSCameraUsageDescription": "L'application a besoin de la caméra pour photographier vos réalisations.",
@@ -25,7 +26,7 @@
       ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#1E293B"
+        "backgroundColor": "#1A1B4B"
       }
     },
     "web": {
@@ -36,13 +37,18 @@
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",
-          "backgroundColor": "#1E293B",
+          "backgroundColor": "#1A1B4B",
           "imageWidth": 200
         }
       ],
       "expo-mail-composer",
       "expo-status-bar",
       "expo-web-browser"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "bb66ed71-9b3a-4a1a-91ff-d6cc8b828afc"
+      }
+    }
   }
 }

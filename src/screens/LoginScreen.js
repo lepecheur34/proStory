@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import {
   View,
   Text,
+  Image,
   TextInput,
   TouchableOpacity,
   StyleSheet,
@@ -35,7 +36,7 @@ export default function LoginScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.flex}>
         <View style={styles.content}>
-          <Text style={styles.logo}>🔧 ProStory</Text>
+          <Image source={require("../../assets/images/logo-wide.png")} style={styles.logo} resizeMode="contain" />
           <Text style={styles.title}>Connexion</Text>
 
           {!isSupabaseConfigured && (
@@ -98,7 +99,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0F172A" },
   flex: { flex: 1 },
   content: { flex: 1, justifyContent: "center", paddingHorizontal: 28 },
-  logo: { fontSize: 22, fontWeight: "800", color: "white", textAlign: "center", marginBottom: 8 },
+  logo: { width: 240, height: 51, alignSelf: "center", marginBottom: 12 },
   title: { fontSize: 28, fontWeight: "800", color: "white", marginBottom: 24, textAlign: "center" },
   warning: {
     backgroundColor: "#FEF3C7",

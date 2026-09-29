@@ -79,6 +79,16 @@ Ils sont injectés via le filtre `template_include` et stylés par
 personnaliser le rendu, il suffit de modifier ces fichiers directement dans
 le plugin.
 
+## Partage (Open Graph)
+
+Chaque fiche réalisation émet ses propres balises Open Graph (`og:image`,
+`og:title`, `og:description`) à partir de l'image à la une, du titre et de la
+méta-description reçus de l'appli — sans dépendre d'un plugin SEO tiers.
+C'est ce qui permet à Facebook/LinkedIn d'afficher un aperçu riche (photo +
+titre + résumé) quand l'artisan partage le lien depuis l'appli. Si Yoast ou
+RankMath est actif sur le site, le plugin laisse la main pour éviter les
+balises en double.
+
 ## Sécurité
 
 - La clé API est générée aléatoirement à l'activation (32 caractères),
