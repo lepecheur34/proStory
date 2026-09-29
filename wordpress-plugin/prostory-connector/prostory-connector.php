@@ -1,8 +1,8 @@
 <?php
 /**
  * Plugin Name: ProStory Connector
- * Description: Reçoit les réalisations créées depuis l'appli mobile ProStory (articles optimisés SEO générés par IA : titre, H1, méta-description, contenu) et les publie automatiquement dans un type de contenu dédié "Réalisations", avec une mise en page premium (fiche + galerie + carousel photo) fournie par le plugin lui-même, quel que soit le thème du site.
- * Version: 1.5.0
+ * Description: Reçoit les réalisations créées depuis l'appli mobile ProStory (articles optimisés SEO générés par IA : titre, H1, méta-description, contenu) et les publie automatiquement dans un type de contenu dédié "Réalisations", avec une mise en page premium (fiche + galerie + carousel photo + vidéo) fournie par le plugin lui-même, quel que soit le thème du site.
+ * Version: 1.6.0
  * Author: ProStory
  * Text Domain: prostory-connector
  */
@@ -11,7 +11,7 @@ if (!defined('ABSPATH')) {
     exit; // Accès direct au fichier interdit.
 }
 
-define('PROSTORY_VERSION', '1.5.0');
+define('PROSTORY_VERSION', '1.6.0');
 define('PROSTORY_OPTION_API_KEY', 'prostory_api_key');
 define('PROSTORY_POST_TYPE', 'prostory_realisation');
 define('PROSTORY_CATEGORY_SLUG', 'realisations');
@@ -288,6 +288,7 @@ function prostory_create_realisation(WP_REST_Request $request) {
     $image_url = esc_url_raw($request->get_param('image_url'));
     $gallery_urls = $request->get_param('gallery_urls');
     $gallery_urls = is_array($gallery_urls) ? array_filter(array_map('esc_url_raw', $gallery_urls)) : array();
+    $video_url = esc_url_raw($request->get_param('video_url'));
 
     if (empty($title) || empty($content)) {
         return new WP_Error('prostory_missing_fields', 'Les champs "title" et "content" sont requis.', array('status' => 400));
@@ -329,6 +330,12 @@ function prostory_create_realisation(WP_REST_Request $request) {
 
     if (!empty($gallery_urls)) {
         prostory_set_gallery($post_id, $gallery_urls);
+    }
+
+    if ($video_url) {
+        // Reste hébergée sur Supabase : on stocke juste le lien plutôt que de
+        // rapatrier le fichier sur l'hébergement WordPress (poids, quota).
+        update_post_meta($post_id, '_prostory_video_url', $video_url);
     }
 
     return array(

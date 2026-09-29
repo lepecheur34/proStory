@@ -49,6 +49,8 @@ export async function testWordPressConnection({ siteUrl, apiKey }) {
 // `h1` (optionnel) sert de titre affiché sur la page si différent du `title`
 // SEO ; `galleryUrls` (optionnel) sont les photos, en plus de `imageUrl`
 // (image à la une), intégrées par le plugin dans un carousel sur la page.
+// `videoUrl` (optionnel) reste hébergée sur Supabase : le plugin l'intègre
+// par simple lien plutôt que de la rapatrier sur l'hébergement WordPress.
 // Retourne { id, url } (l'URL du nouvel article) fournis par le plugin.
 export async function createWordPressArticle({
   siteUrl,
@@ -59,6 +61,7 @@ export async function createWordPressArticle({
   metaDescription,
   imageUrl,
   galleryUrls,
+  videoUrl,
 }) {
   const response = await fetch(`${siteUrl}/wp-json/prostory/v1/realisations`, {
     method: "POST",
@@ -73,6 +76,7 @@ export async function createWordPressArticle({
       meta_description: metaDescription,
       image_url: imageUrl || undefined,
       gallery_urls: galleryUrls && galleryUrls.length ? galleryUrls : undefined,
+      video_url: videoUrl || undefined,
     }),
   });
   const data = await response.json();

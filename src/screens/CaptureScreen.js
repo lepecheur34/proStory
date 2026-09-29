@@ -25,6 +25,7 @@ import { sendReviewEmailWithFallback } from "../services/emailService";
 import { optimizePhoto } from "../services/imageService";
 
 const MAX_PHOTOS = 3;
+const MAX_VIDEO_SECONDS = 20;
 
 export default function CaptureScreen({ route, navigation }) {
   const { metierId } = route.params;
@@ -34,6 +35,7 @@ export default function CaptureScreen({ route, navigation }) {
   const { addRealisation, markChannelSent } = useApp();
 
   const [photos, setPhotos] = useState([null, null, null]);
+  const [video, setVideo] = useState(null);
   const [description, setDescription] = useState("");
   const [email, setEmail] = useState("");
   const [visibility, setVisibility] = useState("private");
@@ -100,6 +102,78 @@ export default function CaptureScreen({ route, navigation }) {
 
   const removePhotoAt = (index) => setPhotoAt(index, null);
 
+  // Une seule courte vidéo par réalisation (optionnelle). Filmée directement,
+  // la durée max est imposée par la caméra elle-même ; choisie dans la
+  // galerie, on vérifie sa durée après coup (la galerie ne permet pas de la
+  // limiter à la prise de vue).
+  const launchVideoCamera = async () => {
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission refusée", "L'accès à la caméra est nécessaire pour filmer une vidéo.");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ["videos"],
+      videoMaxDuration: MAX_VIDEO_SECONDS,
+    });
+    if (!result.canceled && result.assets?.length) {
+      setVideo(result.assets[0].uri);
+    }
+  };
+
+  const launchVideoLibrary = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("Permission refusée", "L'accès à la galerie est nécessaire.");
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["videos"] });
+    if (result.canceled || !result.assets?.length) return;
+    const asset = result.assets[0];
+    if (asset.duration && asset.duration / 1000 > MAX_VIDEO_SECONDS + 2) {
+      Alert.alert(
+        "Vidéo trop longue",
+        `Choisis une vidéo de ${MAX_VIDEO_SECONDS} secondes maximum (garde ça court, ça passe mieux sur mobile).`
+      );
+      return;
+    }
+    setVideo(asset.uri);
+  };
+
+  const handleVideoPress = () => {
+    const isFilled = Boolean(video);
+    const addOptions = ["Filmer", "Choisir dans la galerie", "Annuler"];
+    const filledOptions = ["Remplacer la vidéo", "Supprimer la vidéo", "Annuler"];
+    const options = isFilled ? filledOptions : addOptions;
+
+    if (Platform.OS === "ios") {
+      ActionSheetIOS.showActionSheetWithOptions({ options, cancelButtonIndex: options.length - 1 }, (i) => {
+        if (i === 0) launchVideoCamera();
+        else if (i === 1) {
+          if (isFilled) setVideo(null);
+          else launchVideoLibrary();
+        }
+      });
+    } else {
+      Alert.alert(
+        isFilled ? "Modifier la vidéo" : "Ajouter une vidéo",
+        undefined,
+        isFilled
+          ? [
+              { text: "Remplacer", onPress: launchVideoCamera },
+              { text: "Depuis la galerie", onPress: launchVideoLibrary },
+              { text: "Supprimer", style: "destructive", onPress: () => setVideo(null) },
+              { text: "Annuler", style: "cancel" },
+            ]
+          : [
+              { text: "🎥 Filmer", onPress: launchVideoCamera },
+              { text: "🖼️ Depuis la galerie", onPress: launchVideoLibrary },
+              { text: "Annuler", style: "cancel" },
+            ]
+      );
+    }
+  };
+
   // Un seul point d'entrée pour chaque case photo : vide -> propose de
   // prendre/choisir une photo ; remplie -> propose de la remplacer ou
   // de la supprimer. Plus besoin de boutons Caméra/Galerie séparés.
@@ -161,6 +235,7 @@ export default function CaptureScreen({ route, navigation }) {
         email: trimmedEmail || null,
         description,
         photos: usedPhotos,
+        video,
         facebook: null,
         instagram: null,
         linkedin: null,
@@ -216,6 +291,7 @@ export default function CaptureScreen({ route, navigation }) {
           article,
           wpConnection: { siteUrl: wpConnection.wordpress_site_url, apiKey: wpConnection.wordpress_api_key },
           photoUrls: savedRealisation.photo_urls || [],
+          videoUrl: savedRealisation.video_url || null,
         });
       } else {
         // Pas de site connecté (ou génération impossible) : on rebascule
@@ -266,6 +342,21 @@ export default function CaptureScreen({ route, navigation }) {
               </TouchableOpacity>
             ))}
           </View>
+
+          <Text style={styles.label}>Vidéo courte (optionnel, {MAX_VIDEO_SECONDS} s maximum)</Text>
+          <TouchableOpacity style={styles.videoSlot} onPress={handleVideoPress}>
+            {video ? (
+              <View style={styles.videoFilled}>
+                <Text style={styles.videoFilledIcon}>🎥</Text>
+                <Text style={styles.videoFilledText}>Vidéo ajoutée — appuie pour modifier</Text>
+              </View>
+            ) : (
+              <View style={styles.videoEmpty}>
+                <Text style={styles.emptySlotPlus}>+</Text>
+                <Text style={styles.emptySlotText}>Filmer ou choisir une vidéo</Text>
+              </View>
+            )}
+          </TouchableOpacity>
 
           <Text style={styles.label}>Décris en quelques mots ce que tu as fait</Text>
           <TextInput
@@ -386,6 +477,28 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   editBadgeText: { color: "white", fontSize: 12, fontWeight: "700" },
+  videoSlot: { marginTop: 2 },
+  videoEmpty: {
+    height: 72,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: "#CBD5E1",
+    borderStyle: "dashed",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "white",
+  },
+  videoFilled: {
+    height: 72,
+    borderRadius: 12,
+    backgroundColor: "#0F172A",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  videoFilledIcon: { fontSize: 20 },
+  videoFilledText: { color: "white", fontWeight: "700", fontSize: 13 },
   hint: { fontSize: 11.5, color: "#94A3B8", marginTop: 10 },
   label: { marginTop: 24, marginBottom: 10, fontSize: 14, fontWeight: "700", color: "#334155" },
   input: {

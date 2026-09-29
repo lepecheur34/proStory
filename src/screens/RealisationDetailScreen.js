@@ -12,6 +12,7 @@ import {
   Dimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { VideoView, useVideoPlayer } from "expo-video";
 import { getMetier } from "../data/metiers";
 import { useApp } from "../context/AppContext";
 import { useAuth } from "../context/AuthContext";
@@ -58,6 +59,12 @@ export default function RealisationDetailScreen({ route, navigation }) {
   const [deleting, setDeleting] = useState(false);
   const [checkingFreshList, setCheckingFreshList] = useState(!realisation);
   const [reviewEmailInput, setReviewEmailInput] = useState("");
+  // Le hook doit être appelé à chaque rendu, avant le "return" ci-dessous en
+  // cas de réalisation introuvable : on lui passe null tant qu'il n'y a pas
+  // de vidéo, VideoSource l'accepte explicitement.
+  const videoPlayer = useVideoPlayer(realisation?.video_url || null, (player) => {
+    player.loop = false;
+  });
 
   // Juste après création, cette fiche peut s'ouvrir avant que la liste en
   // mémoire ait fini de se synchroniser (ou après un redémarrage avec un
@@ -243,6 +250,18 @@ export default function RealisationDetailScreen({ route, navigation }) {
           ) : null}
         </View>
 
+        {realisation.video_url ? (
+          <View style={styles.videoWrap}>
+            <VideoView
+              style={styles.video}
+              player={videoPlayer}
+              nativeControls
+              contentFit="cover"
+              allowsFullscreen
+            />
+          </View>
+        ) : null}
+
         <Text style={styles.sectionEyebrow}>CANAUX</Text>
         {visibleChannels.map((channelId) => {
           const meta = CHANNEL_META[channelId];
@@ -368,6 +387,15 @@ const styles = StyleSheet.create({
   metaText: { fontSize: 13.5, color: "#64748B" },
   noteBox: { marginTop: 12, backgroundColor: "#F8FAFC", borderRadius: 10, padding: 12 },
   noteText: { fontSize: 13, color: "#475569", fontStyle: "italic", lineHeight: 18 },
+
+  videoWrap: {
+    marginHorizontal: 20,
+    marginTop: 20,
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "#0F172A",
+  },
+  video: { width: "100%", aspectRatio: 16 / 9 },
 
   sectionEyebrow: {
     fontSize: 11,

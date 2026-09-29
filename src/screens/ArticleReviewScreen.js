@@ -38,7 +38,7 @@ function plainTextToHtml(text) {
 }
 
 export default function ArticleReviewScreen({ route, navigation }) {
-  const { realisationId, article, wpConnection, photoUrls = [] } = route.params;
+  const { realisationId, article, wpConnection, photoUrls = [], videoUrl = null } = route.params;
   const { addChannelToRealisation } = useApp();
 
   const [title, setTitle] = useState(article.title || "");
@@ -65,6 +65,7 @@ export default function ArticleReviewScreen({ route, navigation }) {
         metaDescription: metaDescription.trim(),
         imageUrl: photoUrls[0] || null,
         galleryUrls: photoUrls.slice(1),
+        videoUrl,
       });
       await addChannelToRealisation(realisationId, { wordpress_url: wpResult.url });
       goToRealisation();
@@ -86,6 +87,7 @@ export default function ArticleReviewScreen({ route, navigation }) {
           </Text>
 
           {photoUrls[0] ? <Image source={{ uri: photoUrls[0] }} style={styles.heroImage} /> : null}
+          {videoUrl ? <Text style={styles.hint}>🎥 La vidéo ajoutée sera intégrée à la page.</Text> : null}
 
           <Text style={styles.label}>Titre SEO (balise du site)</Text>
           <TextInput style={styles.input} value={title} onChangeText={setTitle} />
@@ -132,6 +134,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 21, fontWeight: "800", color: "#0F172A" },
   subtitle: { fontSize: 13.5, color: "#64748B", marginTop: 6, marginBottom: 20, lineHeight: 19 },
   heroImage: { width: "100%", aspectRatio: 16 / 10, borderRadius: 14, marginBottom: 20 },
+  hint: { fontSize: 12, color: "#94A3B8", marginTop: -12, marginBottom: 20 },
   label: { marginTop: 18, marginBottom: 10, fontSize: 14, fontWeight: "700", color: "#334155" },
   input: {
     backgroundColor: "white",

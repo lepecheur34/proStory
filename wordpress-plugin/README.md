@@ -42,6 +42,8 @@ Paramètres :
   image_url         (optionnel) URL publique de la photo à mettre en image à la une
   gallery_urls      (optionnel) Tableau d'URLs publiques de photos supplémentaires,
                                  affichées dans un carousel sur la fiche
+  video_url         (optionnel) URL publique d'une courte vidéo (reste hébergée
+                                 hors WordPress, juste liée sur la fiche)
 
 Réponse (200) :
   { "id": 123, "url": "https://<site-wordpress>/mon-article/" }

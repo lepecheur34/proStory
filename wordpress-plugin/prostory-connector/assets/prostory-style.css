@@ -108,6 +108,21 @@
   border-radius: 14px;
 }
 
+/* ---------- Vidéo ---------- */
+
+.prostory-video {
+  margin: 40px 0;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #000;
+}
+
+.prostory-video video {
+  width: 100%;
+  max-height: 70vh;
+  display: block;
+}
+
 /* ---------- Carousel de photos supplémentaires ---------- */
 
 .prostory-carousel {

@@ -46,10 +46,14 @@ create table if not exists public.realisations (
   sent_channels text[] default '{}',
   wordpress_url text,
   visibility text not null default 'private',
+  video_url text,
   created_at timestamptz default now()
 );
 
 alter table public.realisations add column if not exists wordpress_url text;
+-- Une courte vidéo optionnelle par réalisation, hébergée dans le bucket de
+-- stockage "realisations-videos" (voir plus bas).
+alter table public.realisations add column if not exists video_url text;
 -- L'email client est maintenant optionnel à la création (choix fait après,
 -- au moment du partage) : sans effet si déjà nullable.
 alter table public.realisations alter column client_email drop not null;
@@ -92,7 +96,7 @@ create policy "Chacun supprime ses propres réalisations"
 -- colonnes, il est impossible de récupérer des données sensibles même en
 -- interrogeant l'API directement avec la clé publique.
 create or replace view public.community_realisations as
-  select id, metier_id, description, photo_urls, created_at
+  select id, metier_id, description, photo_urls, video_url, created_at
   from public.realisations
   where visibility = 'public';
 
@@ -165,3 +169,21 @@ create policy "Chacun uploade dans son propre dossier"
 create policy "Photos publiques en lecture"
   on storage.objects for select
   using (bucket_id = 'realisations-photos');
+
+
+-- Bucket de stockage pour les courtes vidéos des réalisations (séparé des
+-- photos pour pouvoir régler des limites/quotas différents plus tard).
+insert into storage.buckets (id, name, public)
+values ('realisations-videos', 'realisations-videos', true)
+on conflict (id) do nothing;
+
+create policy "Chacun uploade sa vidéo dans son propre dossier"
+  on storage.objects for insert
+  with check (
+    bucket_id = 'realisations-videos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+create policy "Vidéos publiques en lecture"
+  on storage.objects for select
+  using (bucket_id = 'realisations-videos');

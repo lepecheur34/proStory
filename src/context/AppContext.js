@@ -85,6 +85,32 @@ export function AppProvider({ children }) {
     return urls;
   };
 
+  // Même principe que uploadPhotos, pour la vidéo unique et optionnelle
+  // d'une réalisation. mp4/mov selon la plateforme d'origine ; le bucket est
+  // public en lecture (comme les photos) pour être affichée telle quelle
+  // dans l'app et sur le site WordPress, sans passer par un token.
+  const uploadVideo = async (videoUri) => {
+    if (!isSupabaseConfigured || !user || !videoUri) return null;
+    try {
+      const file = new File(videoUri);
+      const arrayBuffer = await file.arrayBuffer();
+      const extension = videoUri.split(".").pop()?.split("?")[0] || "mp4";
+      const path = `${user.id}/${Date.now()}.${extension}`;
+      const { error } = await supabase.storage
+        .from("realisations-videos")
+        .upload(path, arrayBuffer, { contentType: `video/${extension === "mov" ? "quicktime" : extension}` });
+      if (error) {
+        console.warn("Upload vidéo échoué, on continue sans", error);
+        return null;
+      }
+      const { data } = supabase.storage.from("realisations-videos").getPublicUrl(path);
+      return data.publicUrl;
+    } catch (e) {
+      console.warn("Upload vidéo échoué, on continue sans", e);
+      return null;
+    }
+  };
+
   // NB : toutes les fonctions ci-dessous mettent à jour `realisations` via la
   // forme fonctionnelle de setRealisations(prev => ...), jamais en lisant la
   // variable `realisations` capturée à la création de la fonction. Un écran
@@ -99,6 +125,7 @@ export function AppProvider({ children }) {
   const addRealisation = async (realisation) => {
     if (isSupabaseConfigured && user) {
       const photoUrls = await uploadPhotos(realisation.photos || []);
+      const videoUrl = await uploadVideo(realisation.video);
       const { data, error } = await supabase
         .from("realisations")
         .insert({
@@ -107,6 +134,7 @@ export function AppProvider({ children }) {
           client_email: realisation.email,
           description: realisation.description || null,
           photo_urls: photoUrls,
+          video_url: videoUrl,
           facebook: realisation.facebook,
           instagram: realisation.instagram,
           linkedin: realisation.linkedin,
@@ -134,6 +162,7 @@ export function AppProvider({ children }) {
       metier_id: realisation.metierId,
       client_email: realisation.email,
       photo_urls: realisation.photos || [],
+      video_url: realisation.video || null,
       sent_channels: [],
       visibility: realisation.visibility || "private",
       ...realisation,

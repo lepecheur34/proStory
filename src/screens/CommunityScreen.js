@@ -70,6 +70,11 @@ export default function CommunityScreen() {
                   <Text style={styles.photoPlaceholderEmoji}>{metier.emoji}</Text>
                 </View>
               )}
+              {item.video_url ? (
+                <View style={styles.videoBadge}>
+                  <Text style={styles.videoBadgeText}>🎥 Vidéo</Text>
+                </View>
+              ) : null}
               <View style={styles.cardBody}>
                 <View style={styles.cardHeaderRow}>
                   <Text style={styles.cardMetier}>
@@ -126,6 +131,16 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   photoPlaceholderEmoji: { fontSize: 34, opacity: 0.7 },
+  videoBadge: {
+    position: "absolute",
+    top: 12,
+    right: 12,
+    backgroundColor: "rgba(15, 23, 42, 0.75)",
+    borderRadius: 8,
+    paddingVertical: 4,
+    paddingHorizontal: 9,
+  },
+  videoBadgeText: { color: "white", fontSize: 11, fontWeight: "700" },
   cardBody: { padding: 16 },
   cardHeaderRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8 },
   cardMetier: { fontWeight: "700", fontSize: 14.5, color: "#1E293B" },

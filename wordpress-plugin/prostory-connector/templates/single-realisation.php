@@ -19,6 +19,7 @@ while (have_posts()) :
     $has_thumbnail = has_post_thumbnail();
     $gallery_ids = get_post_meta(get_the_ID(), '_prostory_gallery_ids', true);
     $gallery_ids = is_array($gallery_ids) ? $gallery_ids : array();
+    $video_url = get_post_meta(get_the_ID(), '_prostory_video_url', true);
     ?>
     <main class="prostory-single">
         <?php if ($has_thumbnail) : ?>
@@ -43,6 +44,14 @@ while (have_posts()) :
         <div class="prostory-content">
             <?php the_content(); ?>
         </div>
+
+        <?php if ($video_url) : ?>
+            <div class="prostory-video">
+                <video controls playsinline preload="metadata" <?php if ($has_thumbnail) : ?>poster="<?php echo esc_url(get_the_post_thumbnail_url(get_the_ID(), 'prostory-hero')); ?>"<?php endif; ?>>
+                    <source src="<?php echo esc_url($video_url); ?>" />
+                </video>
+            </div>
+        <?php endif; ?>
 
         <?php if (!empty($gallery_ids)) : ?>
             <div class="prostory-carousel" data-prostory-carousel>
