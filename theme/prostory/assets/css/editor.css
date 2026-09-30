@@ -1,0 +1,34 @@
+/* Aperçu dans l'éditeur de blocs : mêmes polices et couleurs que le site. */
+@font-face {
+	font-family: "Bricolage Grotesque";
+	src: url("../fonts/bricolage-grotesque.woff2") format("woff2");
+	font-weight: 200 800;
+	font-display: swap;
+}
+@font-face {
+	font-family: "Instrument Sans";
+	src: url("../fonts/instrument-sans.woff2") format("woff2");
+	font-weight: 400 700;
+	font-display: swap;
+}
+body {
+	font-family: "Instrument Sans", system-ui, sans-serif;
+	font-size: 1.125rem;
+	line-height: 1.7;
+	color: #1a1b4b;
+}
+h1, h2, h3, h4, .editor-post-title__input {
+	font-family: "Bricolage Grotesque", system-ui, sans-serif;
+	font-weight: 700;
+	letter-spacing: -0.02em;
+	line-height: 1.1;
+}
+a {
+	color: #1a1b4b;
+	text-decoration-color: #f2b10f;
+	text-decoration-thickness: 2px;
+}
+blockquote {
+	border-left: 4px solid #ffc83d;
+	padding-left: 24px;
+}

@@ -1,0 +1,41 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/theme.json",
+	"version": 2,
+	"settings": {
+		"appearanceTools": false,
+		"color": {
+			"custom": true,
+			"defaultPalette": false,
+			"defaultGradients": false,
+			"palette": [
+				{ "slug": "ink", "name": "Bleu nuit", "color": "#1a1b4b" },
+				{ "slug": "signal", "name": "Jaune", "color": "#ffc83d" },
+				{ "slug": "rose", "name": "Rose", "color": "#ff4f7b" },
+				{ "slug": "slate", "name": "Ardoise", "color": "#585b78" },
+				{ "slug": "paper", "name": "Fond", "color": "#f6f6fa" },
+				{ "slug": "white", "name": "Blanc", "color": "#ffffff" }
+			]
+		},
+		"layout": {
+			"contentSize": "760px",
+			"wideSize": "1100px"
+		},
+		"typography": {
+			"customFontSize": true,
+			"defaultFontSizes": false,
+			"fontSizes": [
+				{ "slug": "small", "name": "Petit", "size": "0.875rem" },
+				{ "slug": "medium", "name": "Normal", "size": "1.125rem" },
+				{ "slug": "large", "name": "Grand", "size": "1.5rem" },
+				{ "slug": "x-large", "name": "Très grand", "size": "2.25rem" }
+			],
+			"fontFamilies": [
+				{ "slug": "display", "name": "Bricolage Grotesque", "fontFamily": "\"Bricolage Grotesque\", system-ui, sans-serif" },
+				{ "slug": "body", "name": "Instrument Sans", "fontFamily": "\"Instrument Sans\", system-ui, sans-serif" }
+			]
+		},
+		"spacing": {
+			"units": ["px", "em", "rem", "%", "vw"]
+		}
+	}
+}

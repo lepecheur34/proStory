@@ -1,0 +1,17 @@
+/*
+Theme Name: ProStory
+Theme URI: https://prostory.fr
+Author: ProStory
+Author URI: https://prostory.fr
+Description: Thème sur mesure pour le site vitrine de l'application ProStory, qui transforme les réalisations des artisans et commerçants en outil de communication : page d'accueil avec démonstration animée, fonctionnalités, étapes, tarifs, FAQ et liens de téléchargement, le tout modifiable depuis Apparence > Personnaliser. Inclut un espace de gestion des clients (fiches, formules, statuts, renouvellements, export CSV) réservé aux administrateurs. Polices auto-hébergées, sans appel à Google Fonts (conforme RGPD).
+Version: 1.2.1
+Requires at least: 6.3
+Tested up to: 6.8
+Requires PHP: 7.4
+License: GNU General Public License v2 or later
+License URI: https://www.gnu.org/licenses/gpl-2.0.html
+Text Domain: prostory
+Tags: one-column, custom-logo, custom-menu, featured-images, translation-ready, accessibility-ready
+*/
+
+/* Les styles du thème se trouvent dans assets/css/main.css */
