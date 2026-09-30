@@ -87,18 +87,29 @@ create policy "Chacun supprime ses propres réalisations"
 
 
 -- Vue "communauté" : réalisations marquées publiques, colonnes volontairement
--- limitées au strict nécessaire pour l'affichage (pas d'email client, pas
--- d'identité ni de ville de l'artisan). Les vues Postgres s'exécutent avec
--- les droits de leur propriétaire (ici le rôle qui exécute cette migration,
--- généralement propriétaire de la table) : elle peut donc lire toutes les
--- réalisations publiques malgré le RLS ci-dessus qui limite chaque artisan
--- à ses propres lignes sur la table elle-même. Comme la vue n'expose que ces
--- colonnes, il est impossible de récupérer des données sensibles même en
--- interrogeant l'API directement avec la clé publique.
+-- limitées au strict nécessaire pour l'affichage — pas d'email client, pas
+-- de user_id. Le nom d'entreprise et la ville de l'artisan sont inclus (fiche
+-- détail de la communauté : "plus d'informations sur le vendeur"), mais rien
+-- de plus sensible. Les vues Postgres s'exécutent avec les droits de leur
+-- propriétaire (ici le rôle qui exécute cette migration, généralement
+-- propriétaire des tables) : elle peut donc lire toutes les réalisations
+-- publiques et le profil de chaque artisan malgré le RLS qui limite
+-- normalement chacun à ses propres lignes. Comme la vue n'expose que ces
+-- colonnes, il est impossible de récupérer des données plus sensibles même
+-- en interrogeant l'API directement avec la clé publique.
 create or replace view public.community_realisations as
-  select id, metier_id, description, photo_urls, video_url, created_at
-  from public.realisations
-  where visibility = 'public';
+  select
+    r.id,
+    r.metier_id,
+    r.description,
+    r.photo_urls,
+    r.video_url,
+    r.created_at,
+    p.nom_entreprise,
+    p.ville
+  from public.realisations r
+  left join public.profiles p on p.user_id = r.user_id
+  where r.visibility = 'public';
 
 grant select on public.community_realisations to authenticated;
 

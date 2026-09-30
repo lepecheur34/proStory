@@ -1,5 +1,15 @@
 import React, { useCallback, useState } from "react";
-import { View, Text, Image, FlatList, ScrollView, StyleSheet, RefreshControl, Dimensions } from "react-native";
+import {
+  View,
+  Text,
+  Image,
+  FlatList,
+  ScrollView,
+  StyleSheet,
+  RefreshControl,
+  Dimensions,
+  TouchableOpacity,
+} from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useFocusEffect } from "@react-navigation/native";
 import { getMetier } from "../data/metiers";
@@ -15,7 +25,7 @@ function formatShortDate(iso) {
   return d.toLocaleDateString("fr-FR", { day: "numeric", month: "short" });
 }
 
-export default function CommunityScreen() {
+export default function CommunityScreen({ navigation }) {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -58,7 +68,11 @@ export default function CommunityScreen() {
           const metier = getMetier(item.metier_id);
           const photos = item.photo_urls || [];
           return (
-            <View style={styles.card}>
+            <TouchableOpacity
+              style={styles.card}
+              activeOpacity={0.9}
+              onPress={() => navigation.navigate("CommunityDetail", { realisation: item })}
+            >
               {photos.length > 0 ? (
                 <ScrollView horizontal pagingEnabled showsHorizontalScrollIndicator={false}>
                   {photos.map((url, i) => (
@@ -88,7 +102,7 @@ export default function CommunityScreen() {
                   </Text>
                 ) : null}
               </View>
-            </View>
+            </TouchableOpacity>
           );
         }}
         ListEmptyComponent={

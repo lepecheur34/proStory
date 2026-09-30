@@ -18,6 +18,7 @@ import ArticleReviewScreen from "../screens/ArticleReviewScreen";
 import HistoryScreen from "../screens/HistoryScreen";
 import RealisationDetailScreen from "../screens/RealisationDetailScreen";
 import CommunityScreen from "../screens/CommunityScreen";
+import CommunityDetailScreen from "../screens/CommunityDetailScreen";
 import AccountScreen from "../screens/AccountScreen";
 
 const AuthStack = createNativeStackNavigator();
@@ -87,6 +88,11 @@ function CommunityStackNavigator() {
   return (
     <CommunityStack.Navigator screenOptions={headerOptions}>
       <CommunityStack.Screen name="Community" component={CommunityScreen} options={{ title: "Communauté" }} />
+      <CommunityStack.Screen
+        name="CommunityDetail"
+        component={CommunityDetailScreen}
+        options={{ title: "Réalisation" }}
+      />
     </CommunityStack.Navigator>
   );
 }
